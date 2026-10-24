@@ -49,6 +49,20 @@ describe("discovery", () => {
       code_challenge_methods_supported: ["S256"],
     });
     expect(as.body.authorization_endpoint).toMatch(/\/oauth\/authorize$/);
+    expect(new URL(as.body.authorization_endpoint).origin).toBe(as.body.issuer);
+  });
+
+  it("keeps direct API-port discovery issuer-bound and forwards the complete consent query", async () => {
+    const metadata = (await ctx.http().get("/.well-known/oauth-authorization-server").set("host", "localhost:3001")).body;
+    expect(metadata.authorization_endpoint).toBe(`${metadata.issuer}/api/oauth/authorize`);
+    const query = "client_id=test-client&state=a%2Bb%26c&code_challenge=challenge&redirect_uri=http%3A%2F%2F127.0.0.1%3A43123%2Fcallback&code_challenge_method=S256";
+    const res = await ctx.http().get(`/api/oauth/authorize?${query}`).set("host", "localhost:3001");
+    expect(res.status).toBe(302);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    const consent = new URL(res.headers.location);
+    expect(consent.pathname).toBe("/oauth/authorize");
+    expect(consent.search).toBe(`?${query}`);
+    expect(consent.searchParams.get("state")).toBe("a+b&c");
   });
 });
 

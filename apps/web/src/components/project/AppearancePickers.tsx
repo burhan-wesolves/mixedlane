@@ -90,7 +90,7 @@ export function IconPicker({ value, color, onChange }: { value: string; color: s
   }, [deferred]);
 
   return (
-    <Tabs defaultValue={kind === "emoji" ? "emoji" : "icons"}>
+    <Tabs className="min-w-0" defaultValue={kind === "emoji" ? "emoji" : "icons"}>
       <TabsList>
         <TabsTrigger value="icons">Icons ({iconNames.length.toLocaleString()})</TabsTrigger>
         <TabsTrigger value="emoji">Emoji</TabsTrigger>
@@ -126,7 +126,7 @@ export function IconPicker({ value, color, onChange }: { value: string; color: s
       </TabsContent>
 
       <TabsContent value="emoji" className="mt-3 space-y-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             value={emoji}
             onChange={(e) => {

@@ -111,7 +111,7 @@ function GeneralTab() {
   });
 
   return (
-    <div className="max-w-[66.5rem] divide-y">
+    <div className="w-full divide-y">
       <SettingsRow title="Organization" description="The name and web address everyone in the organization sees.">
         <section className="space-y-4 rounded-xl border bg-card p-5">
           <div className="grid gap-1.5">
@@ -181,7 +181,7 @@ function GeneralTab() {
 /** A settings group: title and help text on the left, its controls on the right (stacked on small screens). */
 function SettingsRow({ title, description, danger, children }: { title: string; description: string; danger?: boolean; children: ReactNode }) {
   return (
-    <div className="grid gap-4 py-8 first:pt-0 last:pb-0 md:grid-cols-[minmax(0,16rem)_minmax(0,48rem)] md:gap-10">
+    <div className="grid gap-4 py-8 first:pt-0 last:pb-0 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] md:gap-10">
       <div>
         <h2 className={cn("font-semibold", danger && "text-destructive")}>{title}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>

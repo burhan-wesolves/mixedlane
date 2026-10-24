@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -9,6 +9,7 @@ import {
   Home,
   LogOut,
   MailWarning,
+  Menu,
   UserCog,
   WifiOff,
   Moon,
@@ -26,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -50,7 +52,8 @@ import { cn } from "@/lib/utils";
 
 export function AppLayout() {
   // The layout sits above the project routes, so read the key from the path.
-  const match = useLocation().pathname.match(/^\/[^/]+\/projects\/([^/]+)/)?.[1];
+  const { pathname } = useLocation();
+  const match = pathname.match(/^\/[^/]+\/projects\/([^/]+)/)?.[1];
   const projectKey = match === "new" ? undefined : match;
   const navigate = useNavigate();
   const { data: projects = [] } = useProjects();
@@ -59,13 +62,16 @@ export function AppLayout() {
   const { dark, toggle } = useTheme();
   const openCreate = useCreateItemDialog();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(() => {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopCollapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem("sidebar") === "collapsed";
     } catch {
       return false;
     }
   });
+  const collapsed = desktopCollapsed && !mobileOpen;
+  useEffect(() => setMobileOpen(false), [pathname]);
 
   const toggleSidebar = () =>
     setCollapsed((c) => {
@@ -92,11 +98,11 @@ export function AppLayout() {
       collapsed && "justify-center px-0",
     );
 
-  return (
-    <div className="flex h-screen overflow-hidden">
+  const sidebar = (
       <aside
+        aria-label="Workspace navigation"
         className={cn(
-          "flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200",
+          "flex h-full shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200",
           collapsed ? "w-14" : "w-64",
         )}
       >
@@ -106,7 +112,7 @@ export function AppLayout() {
 
         <div className={cn("space-y-1 px-3", collapsed && "px-2")}>
           {canCreateItems && (
-            <Button onClick={create} className={cn("w-full justify-start gap-2", collapsed && "justify-center px-0")} size="sm">
+            <Button aria-label="Create work item" onClick={() => { create(); setMobileOpen(false); }} className={cn("w-full justify-start gap-2", collapsed && "justify-center px-0")} size="sm">
               <Plus className="size-4" />
               {!collapsed && (
                 <>
@@ -115,7 +121,7 @@ export function AppLayout() {
               )}
             </Button>
           )}
-          <button onClick={() => setPaletteOpen(true)} className={cn(navItem(false), "w-full border border-sidebar-border bg-background/60")}>
+          <button aria-label="Search workspace" onClick={() => { setPaletteOpen(true); setMobileOpen(false); }} className={cn(navItem(false), "w-full border border-sidebar-border bg-background/60")}>
             <Search className="size-4" />
             {!collapsed && (
               <>
@@ -127,12 +133,12 @@ export function AppLayout() {
         </div>
 
         <nav className={cn("mt-4 flex-1 overflow-y-auto px-3 scroll-thin", collapsed && "px-2")}>
-          <NavLink to={paths.projects()} end className={({ isActive }) => navItem(isActive)}>
+          <NavLink aria-label="All projects" to={paths.projects()} end className={({ isActive }) => navItem(isActive)}>
             <Home className="size-4" />
             {!collapsed && "All projects"}
           </NavLink>
           <NotificationBell collapsed={collapsed} className={cn(navItem(false), "mt-0.5 w-full")} />
-          <NavLink to={paths.docs()} className={({ isActive }) => cn(navItem(isActive), "mt-0.5")}>
+          <NavLink aria-label="Docs" to={paths.docs()} className={({ isActive }) => cn(navItem(isActive), "mt-0.5")}>
             <BookOpen className="size-4" />
             {!collapsed && "Docs"}
           </NavLink>
@@ -150,7 +156,7 @@ export function AppLayout() {
           <div className={cn("space-y-0.5", collapsed && "mt-3")}>
             {projects.map((p) => {
               const link = (
-                <NavLink key={p.id} to={paths.project(p.key)} className={() => navItem(p.key === projectKey)}>
+                <NavLink aria-label={p.name} key={p.id} to={paths.project(p.key)} className={navItem(p.key === projectKey)}>
                   <ProjectIcon icon={p.icon} color={p.color} size="sm" />
                   {!collapsed && <span className="truncate">{p.name}</span>}
                 </NavLink>
@@ -169,24 +175,40 @@ export function AppLayout() {
 
         <div className={cn("space-y-1 border-t border-sidebar-border p-3", collapsed && "px-2")}>
           {can("agent.manage") && (
-            <NavLink to={paths.orgSettings("agents")} className={({ isActive }) => cn(navItem(isActive), "w-full")}>
+            <NavLink aria-label="AI agents" to={paths.orgSettings("agents")} className={({ isActive }) => cn(navItem(isActive), "w-full")}>
               <Bot className="size-4" />
               {!collapsed && "AI agents"}
             </NavLink>
           )}
-          <button onClick={toggle} className={cn(navItem(false), "w-full")}>
+          <button aria-label={dark ? "Light mode" : "Dark mode"} onClick={toggle} className={cn(navItem(false), "w-full")}>
             {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
             {!collapsed && (dark ? "Light mode" : "Dark mode")}
           </button>
-          <button onClick={toggleSidebar} className={cn(navItem(false), "w-full")}>
+          <button aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={toggleSidebar} className={cn(navItem(false), "hidden w-full md:flex")}>
             {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
             {!collapsed && "Collapse"}
           </button>
           <UserMenu collapsed={collapsed} />
         </div>
       </aside>
+  );
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+  return (
+    <div className="flex h-dvh overflow-hidden">
+      <div className="hidden shrink-0 md:block">{!mobileOpen && sidebar}</div>
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" className="w-64 gap-0 p-0">
+          <SheetTitle className="border-b px-4 py-4 text-sm">Workspace navigation</SheetTitle>
+          <SheetDescription className="sr-only">Projects, docs and account controls.</SheetDescription>
+          <div className="min-h-0 flex-1">{mobileOpen && sidebar}</div>
+        </SheetContent>
+      </Sheet>
+      <main id="main-content" className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-4 md:hidden">
+          <Button variant="ghost" size="icon" aria-label="Open navigation" onClick={() => setMobileOpen(true)}><Menu className="size-5" /></Button>
+          <span className="text-sm font-semibold">Mixedlane</span>
+          <Button variant="ghost" size="icon" className="ml-auto" aria-label="Search workspace" onClick={() => setPaletteOpen(true)}><Search className="size-4" /></Button>
+        </div>
         <OfflineBanner />
         {user && !user.emailVerified && <VerifyEmailBanner />}
         <Outlet />
@@ -237,6 +259,7 @@ function OrgSwitcher({ collapsed }: { collapsed: boolean }) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
+            aria-label={`Switch organization: ${org.name}`}
             className={cn(
               "flex w-full items-center gap-2 rounded-lg p-1 text-left outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring",
               collapsed && "justify-center",
@@ -399,7 +422,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
     <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className={cn("mt-1 flex w-full items-center gap-2 rounded-md p-1.5 text-left hover:bg-sidebar-accent", collapsed && "justify-center")}>
+        <button aria-label={`Account menu: ${user.name}`} className={cn("mt-1 flex w-full items-center gap-2 rounded-md p-1.5 text-left hover:bg-sidebar-accent", collapsed && "justify-center")}>
           <UserAvatar name={user.name} className="size-7 text-[11px]" />
           {!collapsed && (
             <span className="min-w-0 flex-1">

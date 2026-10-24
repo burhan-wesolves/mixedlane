@@ -135,9 +135,9 @@ function PageView() {
   const url = `${window.location.origin}${paths.page(spaceKey, page.id)}`;
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-8 pt-6 pb-16">
+    <div className="mx-auto w-full max-w-5xl px-4 pt-6 pb-16 sm:px-8">
       {/* Breadcrumbs + actions */}
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-sm text-muted-foreground">
           <Link to={paths.space(spaceKey)} className="rounded px-1 py-0.5 hover:bg-muted hover:text-foreground">
             {spaceKey}

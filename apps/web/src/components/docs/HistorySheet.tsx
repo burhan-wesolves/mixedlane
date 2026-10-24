@@ -42,10 +42,10 @@ export function HistorySheet({
           </SheetTitle>
           <SheetDescription>Every save is kept. Restoring creates a new version, so nothing is lost.</SheetDescription>
         </SheetHeader>
-        <div className="flex min-h-0 flex-1">
-          <ol className="w-60 shrink-0 overflow-y-auto border-r p-2 scroll-thin">
+        <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+          <ol className="flex max-h-40 shrink-0 gap-1 overflow-auto border-b p-2 scroll-thin sm:block sm:max-h-none sm:w-60 sm:border-r sm:border-b-0">
             {versions.map((v) => (
-              <li key={v.version}>
+              <li key={v.version} className="shrink-0">
                 <button
                   onClick={() => setSelected(v.version)}
                   className={cn("w-full rounded-md px-3 py-2 text-left hover:bg-muted", selected === v.version && "bg-muted")}

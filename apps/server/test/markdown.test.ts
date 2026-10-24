@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { htmlToMarkdown, markdownToHtml } from "../src/core/markdown";
 
 describe("markdown <-> editor html", () => {
+  it("preserves table structure and inline formatting across repeated agent edits", () => {
+    const source = "## Results\n\n| Check | Result |\n| --- | --- |\n| **Lifecycle** | [Passed](https://example.com) |\n| Pipe \\| value | `done` |";
+    const once = htmlToMarkdown(markdownToHtml(source));
+    expect(once).toContain("| Check | Result |");
+    expect(once).toContain("| --- | --- |");
+    expect(once).toContain("| **Lifecycle** | [Passed](https://example.com) |");
+    expect(once).toContain("| Pipe \\| value | `done` |");
+    expect(htmlToMarkdown(markdownToHtml(once))).toBe(once);
+  });
+
+  it("reads editor tables with paragraph cells and missing cells without merging columns", () => {
+    const md = htmlToMarkdown('<table><tbody><tr><th><p>Check</p></th><th><p>Result</p></th></tr><tr><td><p>Agent</p></td><td><p>Passed</p></td></tr><tr><td><p>Pending</p></td></tr></tbody></table>');
+    expect(md).toBe("| Check | Result |\n| --- | --- |\n| Agent | Passed |\n| Pending |  |");
+  });
+
   it("renders agent markdown, including task lists, and escapes raw html", () => {
     const html = markdownToHtml("## Plan\n\n- [ ] write tests\n- [x] ship\n\nSee **APP-12** <script>alert(1)</script>");
     expect(html).toContain("<h2>Plan</h2>");

@@ -74,10 +74,10 @@ export function ListPage() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="px-6 py-3">
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by title or key…" className="h-8 w-64 pl-8" />
+            <Input aria-label="Filter work items" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by title or key…" className="h-8 w-60 max-w-full pl-8" />
           </div>
           <Button variant="ghost" size="sm" onClick={() => setExpanded(new Set(tree.map((i) => i.id)))}>
             <ChevronsUpDown className="size-4" /> Expand all
@@ -90,9 +90,12 @@ export function ListPage() {
 
         {tree.length === 0 ? (
           <EmptyState icon={<TypeIcon type={topType} />} title="Nothing here yet" description={`Add a ${TYPE_LABELS[topType].toLowerCase()} to get started.`} />
+        ) : rows.length === 0 ? (
+          <EmptyState icon={<Search className="size-5" />} title="No matching work items" description="Try another title or item key." action={<Button variant="outline" onClick={() => setQ("")}>Clear filter</Button>} />
         ) : (
-          <div className="overflow-hidden rounded-xl border bg-card">
-            <div className="grid grid-cols-[minmax(0,1fr)_130px_140px_80px_70px_36px] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="overflow-x-auto rounded-xl border bg-card scroll-thin">
+          <div className="min-w-[1000px]">
+            <div className="grid grid-cols-[minmax(360px,1fr)_130px_140px_80px_70px_36px] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
               <span>Title</span>
               <span>Status</span>
               <span>Progress</span>
@@ -110,7 +113,7 @@ export function ListPage() {
                   <div key={item.id}>
                     <div
                       onClick={() => open(item.key)}
-                      className="grid h-10 cursor-pointer grid-cols-[minmax(0,1fr)_130px_140px_80px_70px_36px] items-center gap-3 px-3 text-sm hover:bg-muted/40"
+                      className="grid min-h-11 cursor-pointer grid-cols-[minmax(360px,1fr)_130px_140px_80px_70px_36px] items-center gap-3 px-3 text-sm hover:bg-muted/40"
                     >
                       <div className="flex min-w-0 items-center gap-1.5" style={{ paddingLeft: depth * 20 }}>
                         <button
@@ -125,15 +128,17 @@ export function ListPage() {
                         </button>
                         <TypeIcon type={item.type} />
                         <span className="shrink-0 font-mono text-xs font-medium text-muted-foreground">{item.key}</span>
-                        <span
+                        <button
+                          onClick={(e) => { e.stopPropagation(); open(item.key); }}
+                          title={item.title}
                           className={cn(
-                            "truncate",
+                            "min-w-0 truncate rounded text-left focus-visible:ring-2 focus-visible:ring-ring",
                             (item.type === "epic" || item.type === "milestone") && "font-medium",
                             done && "text-muted-foreground line-through",
                           )}
                         >
                           {item.title}
-                        </span>
+                        </button>
                       </div>
                       <div onClick={(e) => e.stopPropagation()}>
                         <StatusPicker value={item.status} onChange={(status) => update.mutate({ id: item.id, patch: { status } })} />
@@ -155,6 +160,7 @@ export function ListPage() {
               })}
             </div>
             {!visible && <QuickAdd projectId={project.id} parentId={null} type={topType} className="border-t" />}
+          </div>
           </div>
         )}
       </div>

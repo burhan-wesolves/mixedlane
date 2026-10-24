@@ -31,12 +31,12 @@ export function ItemRow({ item, onOpen }: { item: WorkItemSummary; onOpen: OpenI
       role="button"
       tabIndex={0}
       onClick={() => onOpen(item)}
-      onKeyDown={(e) => e.key === "Enter" && onOpen(item)}
-      className="group flex h-11 cursor-pointer items-center gap-3 px-3 text-sm transition-colors hover:bg-muted/50"
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen(item); } }}
+      className="group flex min-h-11 cursor-pointer flex-wrap items-center gap-3 px-3 py-2 text-sm transition-colors hover:bg-muted/50 sm:flex-nowrap"
     >
       <TypeIcon type={item.type} />
-      <span className="w-24 shrink-0 font-mono text-xs font-medium text-muted-foreground">{item.key}</span>
-      <span className={cn("min-w-0 flex-1 truncate", done && "text-muted-foreground line-through")}>
+      <span className="shrink-0 font-mono text-xs font-medium text-muted-foreground sm:w-24">{item.key}</span>
+      <span title={item.title} className={cn("order-1 min-w-0 basis-full truncate sm:order-none sm:flex-1 sm:basis-auto", done && "text-muted-foreground line-through")}>
         {item.title}
       </span>
       {item.progress.total > 0 && <ProgressBar progress={item.progress} showLabel className="hidden w-28 sm:flex" />}

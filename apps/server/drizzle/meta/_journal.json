@@ -57,6 +57,13 @@
       "when": 1790265792496,
       "tag": "0007_user_session_days",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792060000000,
+      "tag": "0008_whatsapp",
+      "breakpoints": true
     }
   ]
 }

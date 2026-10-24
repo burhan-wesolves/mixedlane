@@ -16,7 +16,7 @@ import {
   type WorkItemDetail,
   type WorkItemSummary,
 } from "@mixedlane/shared";
-import { DB, type Db, type Executor } from "../../core/database/database";
+import { DB, type Db, type Executor, type Tx } from "../../core/database/database";
 import { comments, ghEntities, ghLinks, orgMembers, projects, users, workItems } from "../../core/database/schema";
 import { AppError, notFound } from "../../core/http";
 import type { Actor } from "../../core/context";
@@ -59,12 +59,12 @@ export class ItemsService {
    * Normalizes assignee fields: `assigneeId` must be an org member and also sets the display name;
    * a free-text `assignee` without an id clears the link.
    */
-  private async resolveAssignee(orgId: string, input: { assignee?: string | null; assigneeId?: string | null }) {
+  private async resolveAssignee(orgId: string, input: { assignee?: string | null; assigneeId?: string | null }, executor: Executor = this.db) {
     if (input.assigneeId === undefined) {
       return input.assignee === undefined ? {} : { assignee: input.assignee, assigneeId: null };
     }
     if (input.assigneeId === null) return { assignee: input.assignee ?? null, assigneeId: null };
-    const [member] = await this.db
+    const [member] = await executor
       .select({ name: users.name })
       .from(orgMembers)
       .innerJoin(users, eq(users.id, orgMembers.userId))
@@ -111,13 +111,16 @@ export class ItemsService {
     }
   }
 
-  async create(orgId: string, input: ItemCreate, actor: Actor): Promise<ItemRow> {
-    const project = await this.projects.get(orgId, input.projectId);
+  async create(orgId: string, input: ItemCreate, actor: Actor, transaction?: Tx): Promise<ItemRow> {
+    const project = transaction
+      ? (await transaction.select().from(projects).where(and(eq(projects.orgId, orgId), eq(projects.id, input.projectId))))[0]
+      : await this.projects.get(orgId, input.projectId);
+    if (!project) throw notFound("Project");
     const status = input.status ?? project.statuses[0].id;
     this.assertStatus(project, status);
-    const who = await this.resolveAssignee(orgId, input);
+    const who = await this.resolveAssignee(orgId, input, transaction ?? this.db);
 
-    const created = await this.db.transaction(async (tx) => {
+    const insert = async (tx: Executor) => {
       await this.assertParent(orgId, project, input.type, input.parentId, tx);
       // Atomic counter bump — safe under concurrent creates.
       const [{ counter }] = await tx
@@ -155,8 +158,9 @@ export class ItemsService {
         .returning();
       await this.activity.log(tx, orgId, item.id, actor, "created");
       return item;
-    });
-    this.events.emit("item", { orgId, action: "created", item: created, actor });
+    };
+    const created = transaction ? await insert(transaction) : await this.db.transaction(insert);
+    if (!transaction) this.events.emit("item", { orgId, action: "created", item: created, actor });
     return created;
   }
 

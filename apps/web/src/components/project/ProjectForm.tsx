@@ -43,8 +43,8 @@ const suggestCode = (name: string) => {
 
 function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <section className="grid gap-4 border-b py-8 last:border-b-0 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-10">
-      <div>
+    <section className="mb-5 min-w-0 break-inside-avoid rounded-xl border bg-card p-4 sm:p-5 lg:p-6">
+      <div className="mb-5">
         <h2 className="font-semibold">{title}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       </div>
@@ -132,7 +132,7 @@ export function ProjectForm({ project, tree }: { project?: Project; tree?: WorkI
         submit();
       }}
     >
-      <div className="max-w-5xl">
+      <div className="flow-root w-full min-w-0 gap-5 py-5 xl:columns-2">
         <Section title="Basics" description="The name and code identify the project. Every item key starts with the code.">
           <div className="grid gap-4">
             <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_9rem]">
@@ -202,7 +202,7 @@ export function ProjectForm({ project, tree }: { project?: Project; tree?: WorkI
         </Section>
 
         <Section title="Appearance" description="Any color, any icon or emoji — it shows in the sidebar and on project cards.">
-          <div className="grid gap-6">
+          <div className="grid min-w-0 grid-cols-1 gap-6">
             <div className="flex items-center gap-4 rounded-xl border bg-card p-4">
               <ProjectIcon icon={icon} color={color} size="xl" />
               <div className="min-w-0">
@@ -210,11 +210,11 @@ export function ProjectForm({ project, tree }: { project?: Project; tree?: WorkI
                 <p className="text-sm text-muted-foreground">{code || "CODE"} · Preview</p>
               </div>
             </div>
-            <div className="grid gap-2">
+            <div className="grid min-w-0 gap-2">
               <Label>Color</Label>
               <ColorPicker value={color} onChange={setColor} />
             </div>
-            <div className="grid gap-2">
+            <div className="grid min-w-0 gap-2">
               <Label>Icon</Label>
               <IconPicker value={icon} color={color} onChange={setIcon} />
             </div>

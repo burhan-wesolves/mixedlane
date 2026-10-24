@@ -86,6 +86,19 @@ describe("projects & items", () => {
     const found = (await api.get("/api/search?q=checkout")).body;
     expect(found.items.map((i: { key: string }) => i.key)).toContain("AB-000001");
   });
+
+  it.each([
+    { key: "QT", top: "task", child: "subtask" },
+    { key: "QS", top: "story", child: "task" },
+  ] as const)("includes top-level $top work in project statistics", async ({ key, top, child }) => {
+    const project = await api.post("/api/projects").send({ name: `Stats ${key}`, key, itemTypes: [top, child] }).expect(201);
+    const parent = await api.post("/api/items").send({ projectId: project.body.id, type: top, title: "Completed work", status: "done" }).expect(201);
+    let projects = (await api.get("/api/projects").expect(200)).body;
+    expect(projects.find((p: { key: string }) => p.key === key).stats).toEqual({ total: 1, done: 1, inProgress: 0 });
+    await api.post("/api/items").send({ projectId: project.body.id, type: child, parentId: parent.body.id, title: "Remaining work" }).expect(201);
+    projects = (await api.get("/api/projects").expect(200)).body;
+    expect(projects.find((p: { key: string }) => p.key === key).stats).toEqual({ total: 2, done: 1, inProgress: 0 });
+  });
 });
 
 describe("uploads", () => {

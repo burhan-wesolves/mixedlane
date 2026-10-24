@@ -22,6 +22,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.servi
 import { RealtimeModule } from "./modules/realtime/realtime.gateway";
 import { UploadsModule } from "./modules/uploads/uploads.controller";
 import { WorkModule } from "./modules/work/work.module";
+import { WhatsappModule } from "./modules/whatsapp/whatsapp.controller";
 
 /** Liveness + readiness: also checks the database, so orchestrators restart a broken instance. */
 @ApiTags("Health")
@@ -60,6 +61,7 @@ class HealthController {
     PluginsModule,
     UploadsModule,
     GithubModule,
+    WhatsappModule,
     // Demo seeding and the reset endpoint only exist outside production.
     ...(process.env.NODE_ENV === "production" ? [] : [DevModule]),
   ],

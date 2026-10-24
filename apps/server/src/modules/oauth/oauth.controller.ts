@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Module, Param, Post, Query, Res, type INestApplication } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Module, Param, Post, Query, Req, Res, type INestApplication } from "@nestjs/common";
 import { ApiExcludeController } from "@nestjs/swagger";
 import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
@@ -32,6 +32,17 @@ function sendOAuth(res: Response, fn: () => Promise<unknown>, status = 200) {
 @Controller("oauth")
 export class OAuthController {
   constructor(private readonly oauth: OAuthService) {}
+
+  /** Same-origin OAuth entry point; the actual consent screen can live on the dev web server. */
+  @Public()
+  @Get("authorize")
+  authorize(@Req() req: Request, @Res() res: Response) {
+    const consent = new URL("/oauth/authorize", this.oauth.webOrigin(req));
+    const queryStart = req.originalUrl.indexOf("?");
+    if (queryStart !== -1) consent.search = req.originalUrl.slice(queryStart);
+    res.setHeader("cache-control", "no-store");
+    return res.redirect(302, consent.toString());
+  }
 
   /** RFC 7591 dynamic client registration (public, like every MCP-capable authorization server). */
   @Public()

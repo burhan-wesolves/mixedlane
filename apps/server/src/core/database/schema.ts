@@ -14,7 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { GitAutomation, ItemType, Priority, StatusDef } from "@mixedlane/shared";
+import type { GitAutomation, ItemType, Priority, StatusDef, TicketDraft } from "@mixedlane/shared";
 
 const id = () => uuid("id").primaryKey().defaultRandom();
 const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
@@ -487,3 +487,35 @@ export const oauthCodes = pgTable(
   },
   (t) => [index("oauth_codes_client_idx").on(t.clientId)],
 );
+
+export const whatsappConnections = pgTable("whatsapp_connections", {
+  orgId: uuid("org_id").primaryKey().references(() => orgs.id, { onDelete: "cascade" }),
+  baseUrl: text("base_url").notNull(), apiKeyEnc: text("api_key_enc").notNull(),
+  callbackUrl: text("callback_url").notNull(), providersEnc: text("providers_enc").notNull(),
+  webhookSecret: text("webhook_secret").notNull(),
+});
+export const whatsappSessions = pgTable("whatsapp_sessions", {
+  id: uuid("id").primaryKey(), orgId: uuid("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), webhookId: text("webhook_id"), managed: boolean("managed").notNull().default(true),
+});
+export const whatsappContacts = pgTable("whatsapp_contacts", {
+  id: id(), orgId: uuid("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+  phone: text("phone").notNull(), userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+}, (t) => [uniqueIndex("whatsapp_contact_phone_idx").on(t.orgId, t.phone)]);
+export const whatsappDrafts = pgTable("whatsapp_drafts", {
+  id: id(), orgId: uuid("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull().references(() => whatsappSessions.id, { onDelete: "cascade" }),
+  messageId: text("message_id").notNull(), chatId: text("chat_id").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  report: text("report").notNull(), proposal: jsonb("proposal").$type<TicketDraft | null>(),
+  provider: text("provider"), previewMessageId: text("preview_message_id"), status: text("status").notNull().default("select_project"),
+  itemId: uuid("item_id").references(() => workItems.id, { onDelete: "set null" }),
+  error: text("error"), createdAt: createdAt(),
+}, (t) => [uniqueIndex("whatsapp_draft_message_idx").on(t.sessionId, t.messageId)]);
+export const whatsappEvents = pgTable("whatsapp_events", {
+  id: id(), orgId: uuid("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull().references(() => whatsappSessions.id, { onDelete: "cascade" }),
+  eventKey: text("event_key").notNull(), payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
+  processed: boolean("processed").notNull().default(false),
+}, (t) => [uniqueIndex("whatsapp_event_key_idx").on(t.sessionId, t.eventKey)]);

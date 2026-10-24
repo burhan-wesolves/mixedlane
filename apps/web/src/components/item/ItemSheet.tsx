@@ -1,4 +1,6 @@
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { ItemDetail } from "@/components/item/ItemDetail";
 import { useItemSheet } from "@/hooks/ui";
 import { projectKeyOf } from "@/lib/project";
@@ -14,7 +16,10 @@ export function ItemSheet() {
         showCloseButton={false}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <SheetTitle className="sr-only">{openKey}</SheetTitle>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-5 py-2">
+          <SheetTitle className="font-mono text-xs text-muted-foreground">{openKey}</SheetTitle>
+          <SheetClose asChild><Button variant="ghost" size="icon" className="size-8" aria-label="Close item details"><X className="size-4" /></Button></SheetClose>
+        </div>
         <SheetDescription className="sr-only">Work item details</SheetDescription>
         {openKey && (
           <ItemDetail
