@@ -64,6 +64,13 @@
       "when": 1792060000000,
       "tag": "0008_whatsapp",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792858700956,
+      "tag": "0009_scoped_uploads",
+      "breakpoints": true
     }
   ]
 }

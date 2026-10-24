@@ -9,6 +9,7 @@ import { DocsModule } from "../docs/docs.controller";
 import { WorkModule } from "../work/work.module";
 import { McpService } from "./mcp.service";
 import { PlanningService } from "./planning.service";
+import { UploadsModule } from "../uploads/uploads.controller";
 
 const methodNotAllowed = { jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed: this server is stateless, use POST" }, id: null };
 
@@ -54,5 +55,5 @@ export class McpController {
   }
 }
 
-@Module({ imports: [WorkModule, DocsModule], controllers: [McpController], providers: [McpService, PlanningService] })
+@Module({ imports: [WorkModule, DocsModule, UploadsModule], controllers: [McpController], providers: [McpService, PlanningService] })
 export class McpModule {}

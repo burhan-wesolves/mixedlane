@@ -20,6 +20,7 @@ import { sha256 } from "../auth/crypto";
 
 type AgentRow = typeof agents.$inferSelect;
 type KeyRow = typeof apiKeys.$inferSelect;
+type AuthRow = { key: KeyRow; agent: AgentRow; orgSlug: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** ml_<12 hex prefix>_<43 chars of base64url secret> */
@@ -72,6 +73,18 @@ export class AgentsService {
     const expected = Buffer.from(row.key.keyHash, "hex");
     const actual = Buffer.from(sha256(token), "hex");
     if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
+    return this.authorizedContext(row);
+  }
+
+  /** Revalidates the issuing key for a scoped, signed media-upload ticket. Never exposed as an HTTP endpoint. */
+  async contextForKey(keyId: string): Promise<RequestContext | null> {
+    const [row] = await this.db.select({ key: apiKeys, agent: agents, orgSlug: orgs.slug })
+      .from(apiKeys).innerJoin(agents, eq(agents.id, apiKeys.agentId)).innerJoin(orgs, eq(orgs.id, apiKeys.orgId))
+      .where(eq(apiKeys.id, keyId));
+    return row ? this.authorizedContext(row) : null;
+  }
+
+  private async authorizedContext(row: AuthRow): Promise<RequestContext | null> {
     const now = new Date();
     if (row.key.revokedAt || (row.key.expiresAt && row.key.expiresAt <= now) || row.agent.disabledAt) return null;
 

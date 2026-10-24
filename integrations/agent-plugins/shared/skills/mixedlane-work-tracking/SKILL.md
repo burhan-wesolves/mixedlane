@@ -21,6 +21,7 @@ The board should always show what you are doing. Use the `mixedlane` MCP tools.
 - `add_comment` on the item for decisions, trade-offs, blockers or questions for the team (Markdown, short).
 - Found extra work? Add it with `create_plan` under the right story instead of silently doing it.
 - If the scope changes, `update_item` the description/acceptance criteria.
+- For screenshots and videos on any item type (epic, milestone, story, task, subtask), call `upload_media` with the project key and base64 file bytes up to 1 MB. For larger files call `prepare_media_upload` with the exact size/MIME, then POST the local file as multipart field `file` to the returned single-use URL (no browser session needed). Only after a successful upload, embed its returned `markdown` with `update_item` or `add_comment`. Preserve existing description content. Call `read_media` to check stored bytes and inspect small images, then `get_item` to check the saved embed. Never save a data URL or base64 string in the description or claim a screenshot is visible based only on a text update. Reconnect the MCP server if media tools are absent.
 
 ## Finishing
 - `complete_work` with a short summary (what changed, files/PR, anything left):

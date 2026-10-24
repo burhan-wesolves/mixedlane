@@ -24,12 +24,14 @@ import { CommentsService } from "../work/comments.service";
 import { ItemsService } from "../work/items.service";
 import { ProjectsService, isUuid, type ProjectRow } from "../work/projects.service";
 import { PlanningService } from "./planning.service";
+import { INLINE_MEDIA_MAX, UploadsService } from "../uploads/uploads.service";
 
 const INSTRUCTIONS = `Mixedlane is a project tracker (projects → epics → milestones → stories → tasks → subtasks) with Kanban boards and Confluence-style docs.
 
 - Work items are referenced by key, e.g. "APP-0012" (zero padding optional: "APP-12").
 - Statuses are per project: call list_projects (or get_project) first to learn each project's statuses and enabled item types.
 - Descriptions, comments and pages are Markdown in and out.
+- Media: upload_media accepts base64 file bytes up to 1 MB; prepare_media_upload issues a single-file multipart upload URL for larger images/videos without a browser login. Scope uploads to the item's project or the document's space. Embed only the returned markdown in create_item/update_item/add_comment/create_page/update_page. Never paste data: URLs or base64 into descriptions. read_media verifies stored bytes (and returns small images for inspection); saving description text alone is not proof the media uploaded or rendered. If these tools are absent, reconnect to refresh the tool list.
 - You only see projects you were granted, and each tool enforces your permissions (read, create, edit, change status, comment, delete, docs).
 - Everything you do is attributed to you and shown to the team live.`;
 
@@ -69,6 +71,7 @@ export class McpService {
     private readonly docs: DocsService,
     private readonly orgs: OrgsService,
     private readonly planning: PlanningService,
+    private readonly media: UploadsService,
   ) {}
 
   /* ---------- Helpers ---------- */
@@ -649,8 +652,34 @@ export class McpService {
         }),
     );
 
-    /* ----- Resources ----- */
+    /* ----- Media ----- */
 
+    const mediaScope = {
+      project: z.string().min(1).optional().describe("Project key or id for any work item type or comment; requires create, edit, or comment permission"),
+      space: z.string().min(1).optional().describe("Document space key or id; requires write access. Choose project OR space."),
+    };
+    server.registerTool("upload_media", {
+      title: "Upload image or video", description: "Store a media file up to 1 MB using base64 bytes (not a data URL). Returns a protected URL and Markdown to embed in any epic, milestone, story, task, subtask, comment, or document. For larger files use prepare_media_upload. Uploading does not edit the target content.",
+      inputSchema: { ...mediaScope, name: z.string().min(1).max(255), mime: z.string(),
+        dataBase64: z.string().min(1).max(Math.ceil(INLINE_MEDIA_MAX / 3) * 4).describe("Canonical base64 of local file bytes, without a data: prefix") }, annotations: WRITE,
+    }, (args) => run(async () => ok(await this.media.inline(ctx, args))));
+    server.registerTool("prepare_media_upload", {
+      title: "Prepare large media upload", description: "Get a single-use, 10-minute multipart POST URL for a local image (up to 20 MB) or video (up to 200 MB). No browser session or API key extraction is needed. POST the file before embedding the returned upload response's Markdown.",
+      inputSchema: { ...mediaScope, name: z.string().min(1).max(255), mime: z.string(), size: z.number().int().positive().describe("Exact file size in bytes") }, annotations: WRITE,
+    }, (args) => run(async () => ok(await this.media.prepare(ctx, args))));
+    server.registerTool("read_media", {
+      title: "Read uploaded media", description: "Verify an upload exists and read its bytes using agent permissions. Small complete images include image content for inspection; larger files can be read in chunks using nextOffset. Does not need a browser session.",
+      inputSchema: { url: z.string().describe("The returned relative /api/uploads/... URL or storage key"), offset: z.number().int().min(0).default(0), maxBytes: z.number().int().min(1).max(INLINE_MEDIA_MAX).default(INLINE_MEDIA_MAX) }, annotations: READ_ONLY,
+    }, (args) => run(async () => {
+      const data = await this.media.read(ctx, args.url, args.offset, args.maxBytes);
+      if (data.kind === "image" && data.offset === 0 && data.nextOffset === null) {
+        const { dataBase64, ...metadata } = data;
+        return { content: [{ type: "text", text: JSON.stringify(metadata, null, 2) }, { type: "image", data: dataBase64, mimeType: data.mime }] };
+      }
+      return ok(data);
+    }));
+
+    /* ----- Resources ----- */
     server.registerResource(
       "work-item",
       new ResourceTemplate("mixedlane://items/{key}", { list: undefined }),

@@ -182,6 +182,16 @@ Agents are first-class members of an organization, with their own identity.
 
 **MCP server:** at **`/api/mcp`** (Streamable HTTP, stateless). Authenticate with `Authorization: Bearer ml_…`.
 
+Agents can upload media without a signed-in browser:
+
+- `upload_media` accepts `name`, `mime`, `dataBase64` (canonical base64 bytes without a `data:` prefix, up to 1 MB), and exactly one of `project` or `space`. Use the project for any epic, milestone, story, task, subtask, or comment; use the document space for pages. Project uploads require item-create, item-edit, or comment permission; space uploads require document-write permission.
+- `prepare_media_upload` accepts the same scope and file metadata plus the exact byte `size`. It returns a single-use multipart POST URL valid for 10 minutes. POST the local file as field `file` with its declared MIME type; a browser cookie or extracted OAuth/API credential is not needed. Image limit: 20 MB; video limit: 200 MB. Keys, agent status, and current permissions are checked again when the ticket is used. Treat the temporary URL as a secret capability.
+- After HTTP 201 or a successful MCP upload, insert the returned `markdown` using `create_item`, `update_item`, `add_comment`, `create_page`, or `update_page`. Uploading alone does not attach the media to a description/page. Keep existing content and respect page versions. Images use normal Markdown image syntax; protected uploaded videos use `[video](/api/uploads/<id>.webm)` and render as video nodes.
+- `read_media` reads the relative upload URL through agent permissions. Complete images up to 1 MB include MCP image content; larger files can be read in chunks with `offset`, `maxBytes`, and `nextOffset`. Verify stored bytes and read back the target item/page before reporting success; this is not a substitute for a browser visual check when that is required.
+- Supported formats: PNG, JPEG, GIF, WebP, AVIF, MP4, WebM, OGG video, and MOV. SVG and other types remain unsupported. URLs stay protected: browsers use their file cookie, agents can use their API key for HTTP GET, and scoped uploads follow project/space read access. Existing browser uploads retain their organization membership access. Anonymous requests are denied. Reconnect existing MCP clients after deploying to refresh their tools.
+
+Direct multipart `POST /api/uploads` also accepts agent API keys: send `Authorization: Bearer ml_…`, the `file`, and either a `project` or `space` field. Omitting Authorization produces 401; there is no need to automate a browser login.
+
 | Tools | |
 | --- | --- |
 | Work | `whoami`, `list_projects`, `get_project`, `search_items`, `get_item`, `create_item`, `update_item`, `move_item`, `delete_item`, `add_comment`, `list_members` |

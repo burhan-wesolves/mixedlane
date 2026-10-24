@@ -78,3 +78,17 @@ export async function verifyFileToken(token: string | undefined): Promise<string
     return null;
   }
 }
+
+/** Single-file upload capability; cannot be used as an access token or file cookie. */
+export async function signMediaUploadToken(keyId: string, storageKey: string): Promise<string> {
+  return new SignJWT({ typ: "media-upload", keyId, storageKey }).setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt().setIssuer("mixedlane").setAudience("media-upload").setExpirationTime("10m").sign(jwtKey());
+}
+
+export async function verifyMediaUploadToken(token: string): Promise<{ keyId: string; storageKey: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, jwtKey(), { issuer: "mixedlane", audience: "media-upload", algorithms: ["HS256"] });
+    return payload.typ === "media-upload" && typeof payload.keyId === "string" && typeof payload.storageKey === "string"
+      ? { keyId: payload.keyId, storageKey: payload.storageKey } : null;
+  } catch { return null; }
+}
