@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest";
 import { htmlToMarkdown, markdownToHtml } from "../src/core/markdown";
 
 describe("markdown <-> editor html", () => {
+  it("preserves protected images and videos through agent edits without allowing raw HTML or unsafe video URLs", () => {
+    const image = "/api/uploads/11111111-1111-4111-8111-111111111111.png";
+    const video = "/api/uploads/22222222-2222-4222-8222-222222222222.mp4";
+    const markdown = `![Screenshot](${image})\n\n[video](${video})`;
+    const html = markdownToHtml(markdown);
+    expect(html).toContain(`<img src="${image}"`);
+    expect(html).toContain(`<video src="${video}" controls`);
+    expect(htmlToMarkdown(html)).toBe(markdown);
+    expect(markdownToHtml(htmlToMarkdown(html))).toBe(html);
+    expect(markdownToHtml('[video](https://example.com/movie.mp4)')).not.toContain("<video");
+    expect(markdownToHtml('[video](javascript:alert(1))')).not.toContain("<video");
+    expect(markdownToHtml('<video src="/x" onerror="alert(1)"></video>')).not.toContain("<video");
+  });
+
   it("preserves table structure and inline formatting across repeated agent edits", () => {
     const source = "## Results\n\n| Check | Result |\n| --- | --- |\n| **Lifecycle** | [Passed](https://example.com) |\n| Pipe \\| value | `done` |";
     const once = htmlToMarkdown(markdownToHtml(source));

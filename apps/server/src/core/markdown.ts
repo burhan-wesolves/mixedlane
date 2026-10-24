@@ -7,6 +7,24 @@ import TurndownService from "turndown";
  */
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
 
+// Only the protected upload route can turn a [video](...) link into an editor video node.
+// Raw HTML remains disabled, and external/data/javascript links cannot become media markup.
+md.core.ruler.after("inline", "uploaded_video", (state) => {
+  for (const block of state.tokens) {
+    const children = block.children;
+    if (!children) continue;
+    for (let i = 0; i + 2 < children.length; i++) {
+      const [open, label, close] = children.slice(i, i + 3);
+      const href = open.attrGet("href");
+      if (open.type !== "link_open" || label.type !== "text" || label.content !== "video" || close.type !== "link_close"
+        || typeof href !== "string" || !/^\/api\/uploads\/[0-9a-f-]{36}\.(mp4|webm|ogv|mov)$/.test(href)) continue;
+      const video = new state.Token("html_inline", "", 0);
+      video.content = `<video src="${md.utils.escapeHtml(href)}" controls preload="metadata" playsinline></video>`;
+      children.splice(i, 3, video);
+    }
+  }
+});
+
 /** `- [ ] todo` / `- [x] done` lists → the editor's task list markup. */
 function taskLists(html: string): string {
   return html.replace(/<ul>\n?((?:<li>\[[ xX]\][\s\S]*?<\/li>\n?)+)<\/ul>/g, (_m, items: string) => {

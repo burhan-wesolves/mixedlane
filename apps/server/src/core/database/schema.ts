@@ -273,6 +273,10 @@ export const uploads = pgTable("uploads", {
   size: integer("size").notNull(),
   name: text("name").notNull(),
   uploadedBy: uuid("uploaded_by"),
+  /** Agent uploads are scoped; legacy browser uploads retain organization membership access. */
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  spaceId: uuid("space_id").references(() => spaces.id, { onDelete: "cascade" }),
+  uploadState: text("upload_state").$type<"pending" | "uploading" | "ready">().notNull().default("ready"),
   createdAt: createdAt(),
 });
 

@@ -39,7 +39,8 @@ function setupSwagger(app: INestApplication) {
 }
 
 /** Shared by the real server and the test harness. */
-export function configureApp(app: INestApplication) {
+export function configureApp(app: NestExpressApplication) {
+  app.useBodyParser("json", { limit: "5mb" });
   app.setGlobalPrefix("api");
   // In single-container deployments the built web app is served from here too (with a strict CSP).
   const web = webDist();
@@ -59,7 +60,6 @@ export function configureApp(app: INestApplication) {
 export async function createApp() {
   // rawBody keeps the exact bytes for webhook signature checks.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true, bufferLogs: false });
-  app.useBodyParser("json", { limit: "5mb" });
   const trust = config().TRUST_PROXY;
   app.set("trust proxy", trust === "true" ? true : /^\d+$/.test(trust) ? Number(trust) : trust);
   return configureApp(app);
