@@ -39,11 +39,13 @@ const NONE = "__none__";
 
 function Section({ title, description, children, action }: { title: string; description: ReactNode; children: ReactNode; action?: ReactNode }) {
   return (
-    <section className="grid gap-4 border-b py-8 last:border-b-0 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-10">
-      <div>
-        <h2 className="font-semibold">{title}</h2>
-        <div className="mt-1 text-sm text-muted-foreground">{description}</div>
-        {action && <div className="mt-3">{action}</div>}
+    <section className="@container min-w-0 rounded-xl border bg-card p-4 sm:p-5 lg:p-6">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 basis-52">
+          <h2 className="font-semibold">{title}</h2>
+          <div className="mt-1 max-w-prose text-sm text-muted-foreground">{description}</div>
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
       <div className="min-w-0">{children}</div>
     </section>
@@ -76,12 +78,12 @@ export function ProjectGithubSettings({ project }: { project: Project }) {
   if (isLoading || !data || !conn) return <Skeleton className="m-6 h-64" />;
 
   return (
-    <div className="px-6">
-      <div className="max-w-5xl">
+    <div className="min-w-0 px-4 pt-5 sm:px-6">
+      <div className="grid items-stretch gap-5 xl:grid-cols-2">
         <Repositories project={project} repos={data.repos} webhookUrl={conn.webhookUrl} />
         <HowTo project={project} />
-        <AutomationEditor key={JSON.stringify(data.automation)} project={project} saved={data.automation} />
       </div>
+      <AutomationEditor key={JSON.stringify(data.automation)} project={project} saved={data.automation} />
     </div>
   );
 }
@@ -121,8 +123,8 @@ function Repositories({ project, repos, webhookUrl }: { project: Project; repos:
             {repos.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <FaGithub className="size-5 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <a href={r.htmlUrl} target="_blank" rel="noreferrer" className="font-medium hover:underline">
+                <div className="min-w-0 basis-[calc(100%-3rem)] @min-[600px]:flex-1 @min-[600px]:basis-0">
+                  <a href={r.htmlUrl} target="_blank" rel="noreferrer" className="font-medium [overflow-wrap:anywhere] hover:underline">
                     {r.fullName}
                   </a>
                   <p className="text-xs text-muted-foreground">
@@ -263,11 +265,11 @@ function HowTo({ project }: { project: Project }) {
         </>
       }
     >
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
         {examples.map(([label, code]) => (
-          <div key={label} className="rounded-lg border bg-card p-3">
+          <div key={label} className="min-w-0 rounded-lg border bg-card p-3">
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">{label}</p>
-            <code className="block truncate font-mono text-xs" title={code}>
+            <code className="block font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]" title={code}>
               {code}
             </code>
           </div>
@@ -290,7 +292,7 @@ const MATCH_HINT: Record<DeploySource, string> = {
 function StatusSelect({ project, value, onChange, allowNone = true }: { project: Project; value: string | null; onChange: (v: string | null) => void; allowNone?: boolean }) {
   return (
     <Select value={value ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)}>
-      <SelectTrigger size="sm" className="w-48">
+      <SelectTrigger size="sm" className="w-full sm:w-48">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -339,6 +341,7 @@ function AutomationEditor({ project, saved }: { project: Project; saved: GitAuto
 
   return (
     <>
+      <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
       <Section
         title="Automation"
         description="Move items through your workflow as work happens on GitHub. Each rule fires once per real change — replays and duplicate deliveries are ignored."
@@ -346,12 +349,12 @@ function AutomationEditor({ project, saved }: { project: Project; saved: GitAuto
         <div className="space-y-3">
           <Toggle checked={draft.enabled} onChange={(enabled) => set({ enabled })} label="Automations enabled" hint="Turn off to only link GitHub activity without moving items." />
           <div className={cn("divide-y overflow-hidden rounded-xl border bg-card", !draft.enabled && "pointer-events-none opacity-50")}>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground">
+            <div className="hidden grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid">
               <span>When…</span>
               <span className="w-48">Move linked items to</span>
             </div>
             {TRIGGERS.map((t) => (
-              <div key={t} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5">
+              <div key={t} className="grid grid-cols-1 items-center gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3 sm:py-2.5">
                 <span className="text-sm">{GIT_TRIGGER_LABELS[t]}</span>
                 <StatusSelect project={project} value={draft[t]} onChange={(v) => set({ [t]: v } as Partial<GitAutomation>)} />
               </div>
@@ -360,6 +363,7 @@ function AutomationEditor({ project, saved }: { project: Project; saved: GitAuto
         </div>
       </Section>
 
+      <div className="grid min-w-0 gap-5">
       <Section
         title="Deploy rules"
         description="When code reaches an environment, move every item that shipped — Mixedlane compares the deployed commit with the previous deploy to find them."
@@ -441,8 +445,10 @@ function AutomationEditor({ project, saved }: { project: Project; saved: GitAuto
           />
         </div>
       </Section>
+      </div>
+      </div>
 
-      <div className="sticky bottom-0 -mx-6 flex items-center justify-end gap-2 border-t bg-background/90 px-6 py-3 backdrop-blur">
+      <div className="sticky bottom-0 z-10 -mx-4 mt-5 flex flex-wrap items-center justify-end gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
         {dirty && <span className="mr-auto text-sm text-muted-foreground">Unsaved changes</span>}
         <Button variant="ghost" disabled={!dirty} onClick={() => setDraft(saved)}>
           Reset

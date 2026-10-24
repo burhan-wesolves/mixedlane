@@ -69,7 +69,7 @@ export function DocsHome() {
 
         <div className="relative mb-8">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search all pages…" className="h-10 pl-9" />
+          <Input aria-label="Search all pages" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search all pages…" className="h-10 pl-9" />
           {query.length > 1 && (
             <div className="mt-2 overflow-hidden rounded-xl border bg-card">
               {isFetching && !hits ? (
@@ -201,19 +201,18 @@ function CreateSpaceDialog({ open, onOpenChange }: { open: boolean; onOpenChange
           <DialogDescription>Spaces hold a tree of pages. Link one to a project to share that project's access.</DialogDescription>
         </DialogHeader>
         <form
-          className="grid gap-4"
+          className="grid min-w-0 grid-cols-1 gap-4"
           onSubmit={(e) => {
             e.preventDefault();
             if (valid) void submit();
           }}
         >
-          <div className="flex items-end gap-3">
-            <IconPicker value={icon} color={color} onChange={setIcon} />
-            <div className="grid flex-1 gap-1.5">
+          <div className="grid grid-cols-[minmax(0,1fr)_6rem] items-end gap-3">
+            <div className="grid min-w-0 gap-1.5">
               <Label htmlFor="space-name">Name</Label>
               <Input id="space-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Engineering" />
             </div>
-            <div className="grid w-28 gap-1.5">
+            <div className="grid min-w-0 gap-1.5">
               <Label htmlFor="space-key">Key</Label>
               <Input
                 id="space-key"
@@ -226,10 +225,13 @@ function CreateSpaceDialog({ open, onOpenChange }: { open: boolean; onOpenChange
               />
             </div>
           </div>
-          <div className="grid gap-1.5">
-            <Label>Color</Label>
-            <ColorPicker value={color} onChange={setColor} />
-          </div>
+          <details className="min-w-0 rounded-lg border p-3">
+            <summary className="cursor-pointer text-sm font-medium">Customize icon and color</summary>
+            <div className="mt-4 grid min-w-0 gap-4">
+              <IconPicker value={icon} color={color} onChange={setIcon} />
+              <ColorPicker value={color} onChange={setColor} />
+            </div>
+          </details>
           <div className="grid gap-1.5">
             <Label htmlFor="space-desc">Description</Label>
             <Textarea id="space-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="What lives here?" />
@@ -237,7 +239,7 @@ function CreateSpaceDialog({ open, onOpenChange }: { open: boolean; onOpenChange
           <div className="grid gap-1.5">
             <Label>Access</Label>
             <Select value={projectId} onValueChange={setProjectId}>
-              <SelectTrigger>
+              <SelectTrigger aria-label="Space access" className="w-full min-w-0">
                 <SelectValue>
                   {projectId === NO_PROJECT ? "Whole organization (members can edit)" : `Same as project ${projects.find((p) => p.id === projectId)?.key}`}
                 </SelectValue>

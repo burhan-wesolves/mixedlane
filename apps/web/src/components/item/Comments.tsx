@@ -33,7 +33,7 @@ export function Comments({ itemId }: { itemId: string }) {
       {can("comment.create") && (
       <div className="flex gap-3">
         <UserAvatar name={user?.name ?? "You"} className="mt-1 size-7" />
-        <div className="flex-1 space-y-2">
+        <div className="min-w-0 flex-1 space-y-2">
           <RichEditor key={composerKey} value="" onChange={setDraft} placeholder="Add a comment… (Ctrl+Enter to send)" onSubmit={submit} compact />
           {!isEmptyHtml(draft) && (
             <div className="flex gap-2">
@@ -106,7 +106,7 @@ function CommentRow({ comment, itemId }: { comment: Comment; itemId: string }) {
           {!editing && canChange && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="ml-auto rounded p-1 text-muted-foreground opacity-0 hover:bg-muted group-hover:opacity-100 data-[state=open]:opacity-100" aria-label="Comment actions">
+                <button className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 data-[state=open]:opacity-100" aria-label="Comment actions">
                   <MoreHorizontal className="size-4" />
                 </button>
               </DropdownMenuTrigger>

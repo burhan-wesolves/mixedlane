@@ -439,6 +439,22 @@ docker compose --profile s3 up -d --build
 - The full test suite passes against PGlite and against Postgres 17.
 - A smoke test against the compose stack passed: health, SPA and CSP, registration, docs search, S3 upload and range reads, an agent over MCP, and live socket delivery.
 
+## WhatsApp intake and AI triage
+
+Owners and admins configure **Settings → Integrations → WhatsApp** with an OpenWA gateway URL and API key, plus a Mixedlane base URL reachable from that gateway. Link an existing OpenWA session, or add an account and scan its QR directly inside Mixedlane. The integration targets OpenWA's session-based REST API (`/api/sessions`, verified against v0.24.0), not the separate `@open-wa/wa-automate` API.
+
+Map team phone numbers (full country code) to organization members. Only direct messages from mapped current members trigger intake. Send `APP Login fails after reset` to choose a project directly, or send a report and choose from the project list. Project permissions apply both during AI triage and at approval.
+
+LangChain tries **Ollama Cloud → Gemini → Grok (xAI)** in order, skipping unconfigured providers. Configure model names and credentials for each provider; Ollama's direct cloud API uses the name listed by `https://ollama.com/api/tags` (for example `gemma4:31b`). Provider HTTP failures, malformed JSON, and invalid hierarchy proposals trigger fallback. The AI decides the enabled work item type, parent, priority, category and description, with possible duplicates flagged for review. Existing project items are supplied as context, capped at the 200 most recently updated items; this is not an exhaustive duplicate search.
+
+The sender can create, edit, or cancel from the WhatsApp preview. Quoted replies such as `yes`, `cancel`, or additional details review or refine the same draft. Admins can approve or cancel from the app's draft queue and retry failed AI generation. Approval creates the ticket and closes the draft in one database transaction, so concurrent approvals create one ticket. Reports and signed webhook events are deduplicated by session and message ID. Incoming events, AI work, and notifications use the existing database job queue.
+
+Button/list sends require a compatible OpenWA engine (the verified API documents Baileys). Unsupported-engine responses fall back to quoted text commands; text commands also appear in previews for clients that do not render buttons. The integration sends idempotency headers supported by the gateway; delivery retry guarantees depend on its version. Screenshots and voice transcription are not processed by this initial text intake.
+
+Credentials are encrypted with Mixedlane's `SECRET_KEY` and never returned by settings endpoints. Leave saved key inputs blank to retain them. To provision encrypted defaults on a local installation, set `OPENWA_API_KEY`, `OLLAMA_API_KEY`, and optionally `OPENWA_URL` / `OLLAMA_MODEL` in the process environment, then run `node --import @swc-node/register/esm-register ../../scripts/configure-whatsapp.mjs` from `apps/server`. This writes only encrypted values into the ignored `apps/server/data/whatsapp-bootstrap.json`; organization settings take precedence. Preserve the encryption key and data together when moving the installation. Tests ignore these defaults.
+
+For LAN delivery, the gateway must be allowed to reach the configured callback host; OpenWA's webhook URL policy may require that host in `SSRF_ALLOWED_HOSTS`. Newly created sessions belong to Mixedlane and are deleted when removed here. Linking an existing session adds a webhook; removing that link preserves the existing OpenWA session.
+
 ## Roadmap
 
 - ~~Phase 3 — Realtime~~ ✅ live updates, presence, notifications inbox

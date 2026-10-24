@@ -72,7 +72,7 @@ export function BoardPage() {
       <div className="flex flex-wrap items-center gap-2 px-6 py-3">
         <div className="relative">
           <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter cards…" className="h-8 w-52 pl-8" />
+          <Input aria-label="Filter board cards" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter cards…" className="h-8 w-52 pl-8" />
         </div>
 
         {types.length > 1 && (
@@ -80,6 +80,7 @@ export function BoardPage() {
           {([ALL, ...types] as const).map((t) => (
             <button
               key={t}
+              aria-pressed={type === t}
               onClick={() => setType(t)}
               className={cn(
                 "flex h-full items-center gap-1.5 rounded px-2.5 text-xs font-medium text-muted-foreground transition-colors",
@@ -132,7 +133,7 @@ export function BoardPage() {
             <X className="size-4" /> Clear
           </Button>
         )}
-        <span className="ml-auto text-xs text-muted-foreground">{items.length} cards</span>
+        <span className="ml-auto text-xs text-muted-foreground">{items.length} {items.length === 1 ? "card" : "cards"}</span>
       </div>
 
       <div className="min-h-0 flex-1">
@@ -155,7 +156,7 @@ function FilterSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger size="sm" className={cn("max-w-48", value !== ALL && "border-primary/50 bg-primary/5")}>
+      <SelectTrigger aria-label={placeholder} size="sm" className={cn("max-w-48", value !== ALL && "border-primary/50 bg-primary/5")}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

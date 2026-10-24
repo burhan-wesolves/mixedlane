@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOrg } from "@/lib/auth";
+import { WhatsappIntegration } from "./WhatsappIntegration";
 import { copyText } from "@/lib/clipboard";
 import {
   useConnectGithub,
@@ -34,6 +35,7 @@ export function IntegrationsPage({ embedded }: { embedded?: boolean }) {
   const manage = can("integration.manage");
   const body = (
       <div className="space-y-6">
+        <WhatsappIntegration />
         {!manage && (
           <p className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
             Only organization owners and admins can connect or change integrations.
@@ -41,8 +43,8 @@ export function IntegrationsPage({ embedded }: { embedded?: boolean }) {
         )}
         <section className="overflow-hidden rounded-xl border bg-card">
           <div className="flex items-center gap-3 border-b px-5 py-4">
-            <FaGithub className="size-7" />
-            <div>
+            <FaGithub className="size-7 shrink-0" />
+            <div className="min-w-0">
               <h2 className="font-semibold">GitHub</h2>
               <p className="text-sm text-muted-foreground">
                 Link branches, commits, pull requests and deployments to work items — and move items automatically.
@@ -93,13 +95,13 @@ function ConnectForm() {
 
   return (
     <form
-      className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]"
+      className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <div className="grid gap-1.5">
           <Label htmlFor="token">Personal access token</Label>
           <Input
@@ -123,7 +125,7 @@ function ConnectForm() {
             Using GitHub Enterprise Server?
           </button>
         )}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={token.trim().length < 10 || connect.isPending}>
             <FaGithub /> {connect.isPending ? "Checking token…" : "Connect GitHub"}
           </Button>

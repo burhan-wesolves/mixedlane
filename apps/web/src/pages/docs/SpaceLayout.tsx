@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, Outlet, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { formatDistanceToNowStrict } from "date-fns";
-import { ArrowLeft, FileText, FolderKanban, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, FileText, FolderKanban, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ export function SpaceLayout() {
   const { data: space, error } = useSpace(spaceKey);
   const { data: pages = [] } = usePageTree(spaceKey);
   const [newParent, setNewParent] = useState<string | null | undefined>(undefined);
+  const [treeOpen, setTreeOpen] = useState(false);
 
   if (error) {
     return (
@@ -50,8 +51,8 @@ export function SpaceLayout() {
   const newPage = (parentId: string | null) => setNewParent(parentId);
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <aside className="flex w-72 shrink-0 flex-col border-r bg-muted/20">
+    <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
+      <aside className="flex max-h-[45dvh] shrink-0 flex-col border-b bg-muted/20 xl:max-h-none xl:w-64 xl:border-r xl:border-b-0">
         <div className="border-b p-3">
           <Link to={paths.docs()} className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
             <ArrowLeft className="size-3" /> All spaces
@@ -68,15 +69,18 @@ export function SpaceLayout() {
             <Skeleton className="h-6 w-40" />
           )}
         </div>
-        <div className="flex items-center justify-between px-3 pt-3 pb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-          Pages
+        <div className="flex items-center justify-between px-3 py-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          <button aria-expanded={treeOpen} aria-controls="space-page-tree" onClick={() => setTreeOpen(!treeOpen)} className="flex items-center gap-2 rounded py-1 xl:hidden">
+            Pages <ChevronDown className={`size-3.5 transition-transform ${treeOpen ? "rotate-180" : ""}`} />
+          </button>
+          <span className="hidden xl:inline">Pages</span>
           {space?.canWrite && (
             <button onClick={() => newPage(null)} className="rounded p-0.5 hover:bg-muted" aria-label="New page">
               <Plus className="size-3.5" />
             </button>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto px-2 pb-4 scroll-thin">
+        <div id="space-page-tree" className={`${treeOpen ? "block" : "hidden"} min-h-0 flex-1 overflow-y-auto px-2 pb-4 scroll-thin xl:block`}>
           {pages.length ? (
             <PageTree spaceKey={spaceKey} pages={pages} activeId={pageId} canWrite={!!space?.canWrite} onAddChild={newPage} />
           ) : (
@@ -196,8 +200,8 @@ export function SpaceHome() {
   const recent = [...pages].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 12);
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-8 py-10">
-      <div className="flex items-start gap-4">
+    <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-8">
+      <div className="flex flex-wrap items-start gap-4">
         <ProjectIcon icon={space.icon} color={space.color} size="lg" />
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold tracking-tight">{space.name}</h1>
@@ -229,7 +233,7 @@ export function SpaceHome() {
             <Link key={p.id} to={paths.page(space.key, p.id)} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/50">
               <FileText className="size-4 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate font-medium">{p.title}</span>
-              <span className="text-xs text-muted-foreground">{formatDistanceToNowStrict(new Date(p.updatedAt), { addSuffix: true })}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{formatDistanceToNowStrict(new Date(p.updatedAt), { addSuffix: true })}</span>
             </Link>
           ))}
         </div>

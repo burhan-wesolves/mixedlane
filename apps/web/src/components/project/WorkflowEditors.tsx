@@ -157,21 +157,22 @@ export function StatusesEditor({ value, onChange }: { value: StatusDef[]; onChan
         onPick={(v) => onChange(v.map((s) => ({ ...s })))}
       />
       <div className="divide-y overflow-hidden rounded-lg border">
-        <div className="grid grid-cols-[2.25rem_minmax(0,1fr)_10rem_5rem] items-center gap-2 bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+        <div className="hidden grid-cols-[2.25rem_minmax(0,1fr)_10rem_5rem] items-center gap-2 bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground sm:grid">
           <span>Color</span>
           <span>Name (board column)</span>
           <span>Counts as</span>
           <span />
         </div>
         {value.map((s, i) => (
-          <div key={s.id} className="grid grid-cols-[2.25rem_minmax(0,1fr)_10rem_5rem] items-center gap-2 px-3 py-2">
+          <div key={s.id} className="grid grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-2 px-3 py-3 sm:grid-cols-[2.25rem_minmax(0,1fr)_10rem_5rem] sm:py-2">
             <label className="relative size-7 cursor-pointer overflow-hidden rounded-full border shadow-xs" style={{ backgroundColor: s.color }} title="Status color">
               <input type="color" value={s.color} onChange={(e) => update(i, { color: e.target.value })} className="absolute inset-0 cursor-pointer opacity-0" />
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <StatusIcon status={s} />
               <Input
                 value={s.name}
+                aria-label={`Status ${i + 1} name`}
                 onChange={(e) => update(i, { name: e.target.value })}
                 aria-invalid={!s.name.trim() || value.some((o, j) => j !== i && o.name.trim().toLowerCase() === s.name.trim().toLowerCase())}
                 className="h-8"
@@ -179,7 +180,7 @@ export function StatusesEditor({ value, onChange }: { value: StatusDef[]; onChan
               />
             </div>
             <Select value={s.category} onValueChange={(c) => update(i, { category: c as StatusCategory })}>
-              <SelectTrigger size="sm" className="w-full">
+              <SelectTrigger aria-label={`Status ${i + 1} category`} size="sm" className="col-start-2 w-full sm:col-auto">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -190,7 +191,7 @@ export function StatusesEditor({ value, onChange }: { value: StatusDef[]; onChan
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex justify-end gap-0.5">
+            <div className="col-span-2 flex justify-end gap-0.5 sm:col-span-1">
               <IconBtn label="Move up" disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp /></IconBtn>
               <IconBtn label="Move down" disabled={i === value.length - 1} onClick={() => move(i, 1)}><ArrowDown /></IconBtn>
               <IconBtn label="Remove" disabled={value.length === 1} onClick={() => onChange(value.filter((_, j) => j !== i))} danger><Trash2 /></IconBtn>

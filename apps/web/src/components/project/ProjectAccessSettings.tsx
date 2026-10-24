@@ -71,9 +71,9 @@ export function ProjectAccessSettings({ project }: { project: Project }) {
   ];
 
   return (
-    <div className="max-w-3xl space-y-8 px-6 py-6">
+    <div className="grid items-start gap-6 px-6 py-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
       {!admin && (
-        <p className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">Only project admins can change access.</p>
+        <p className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground xl:col-span-2">Only project admins can change access.</p>
       )}
 
       <section className="space-y-3">

@@ -189,9 +189,15 @@ describe("MCP server", () => {
     expect(((await client.callTool({ name: "create_page", arguments: { space: "ENG", title: "Bot notes" } })) as ToolResult).isError).toBe(true);
 
     await owner.api(org).patch(`/api/agents/${agentId}`).send({ docAccess: "write" }).expect(200);
-    const created = json(await client.callTool({ name: "create_page", arguments: { space: "ENG", title: "Bot notes", content: "Relates to APP-2" } }));
+    const content = "Relates to APP-2\n\n| Check | Result |\n| --- | --- |\n| Agent workflow | **Passed** |";
+    const created = json(await client.callTool({ name: "create_page", arguments: { space: "ENG", title: "Bot notes", content } }));
     const detail = (await owner.api(org).get(`/api/pages/${created.id}`)).body;
     expect(detail).toMatchObject({ updatedByName: "Triage Bot", linkedItems: [{ key: "APP-0002" }] });
+    const read = json(await client.callTool({ name: "get_page", arguments: { id: created.id } }));
+    expect(read.content).toContain("| Agent workflow | **Passed** |");
+    await client.callTool({ name: "update_page", arguments: { id: created.id, version: read.version, content: read.content } });
+    const reread = json(await client.callTool({ name: "get_page", arguments: { id: created.id } }));
+    expect(reread).toMatchObject({ version: read.version, content: read.content });
     // Stale version → conflict surfaced as a tool error.
     await client.callTool({ name: "update_page", arguments: { id: page.id, version: 1, content: "v2" } });
     const stale = (await client.callTool({ name: "update_page", arguments: { id: page.id, version: 1, content: "v3" } })) as ToolResult;

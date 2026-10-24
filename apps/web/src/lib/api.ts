@@ -86,6 +86,22 @@ const json = (method: string, body: unknown): RequestInit => ({ method, body: JS
 export type ProjectWithAccess = Project & { access: ProjectAccessInfo };
 
 export const api = {
+  whatsapp: {
+    settings: () => request<import("@mixedlane/shared").WhatsappSettingsInfo>("/whatsapp/settings"),
+    save: (input: import("@mixedlane/shared").WhatsappSettingsInput) => request<import("@mixedlane/shared").WhatsappSettingsInfo>("/whatsapp/settings", json("PUT", input)),
+    sessions: () => request<import("@mixedlane/shared").WhatsappSession[]>("/whatsapp/sessions"),
+    available: () => request<import("@mixedlane/shared").WhatsappSession[]>("/whatsapp/available-sessions"),
+    linkSession: (id: string) => request(`/whatsapp/sessions/${id}/link`, json("POST", {})),
+    createSession: (name: string) => request("/whatsapp/sessions", json("POST", { name })),
+    start: (id: string) => request(`/whatsapp/sessions/${id}/start`, json("POST", {})),
+    qr: (id: string) => request<{ qrCode: string; status: string }>(`/whatsapp/sessions/${id}/qr`),
+    removeSession: (id: string) => request(`/whatsapp/sessions/${id}`, { method: "DELETE" }),
+    contacts: () => request<import("@mixedlane/shared").WhatsappContact[]>("/whatsapp/contacts"),
+    contact: (phone: string, userId: string) => request("/whatsapp/contacts", json("PUT", { phone, userId })),
+    removeContact: (id: string) => request(`/whatsapp/contacts/${id}`, { method: "DELETE" }),
+    drafts: () => request<import("@mixedlane/shared").WhatsappDraft[]>("/whatsapp/drafts"),
+    review: (id: string, action: "approve" | "cancel" | "retry") => request(`/whatsapp/drafts/${id}/review`, json("POST", { action })),
+  },
   auth: {
     login: (email: string, password: string) => request<AuthResponse>("/auth/login", json("POST", { email, password })),
     register: (input: { name: string; email: string; password: string; orgName: string }) =>

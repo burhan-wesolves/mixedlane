@@ -6,7 +6,7 @@ import Underline from "@tiptap/extension-underline";
 import Image from "@tiptap/extension-image";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import Table from "@tiptap/extension-table";
+import { Table } from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
@@ -81,7 +81,7 @@ export const Video = Node.create({
 /** One schema for editing and read-only rendering, so everything that can be written can be shown. */
 export function editorExtensions(placeholder?: string): Extensions {
   return [
-    StarterKit.configure({ heading: { levels: [1, 2, 3] }, codeBlock: false }),
+    StarterKit.configure({ heading: { levels: [1, 2, 3] }, codeBlock: false, link: false, underline: false }),
     Underline,
     Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" } }),
     Image.configure({ inline: false, allowBase64: false }),

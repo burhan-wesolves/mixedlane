@@ -24,6 +24,22 @@ export function markdownToHtml(markdown: string): string {
 }
 
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced", bulletListMarker: "-", emDelimiter: "*" });
+// Turndown's default table handling drops the structure. Agents must receive a table they can
+// write back without losing columns, including tables created by the rich-text editor.
+turndown.addRule("table", {
+  filter: "table",
+  replacement: (_content, node) => {
+    const rows = Array.from((node as HTMLElement).querySelectorAll("tr")).map((row) =>
+      Array.from(row.children)
+        .filter((cell) => cell.nodeName === "TH" || cell.nodeName === "TD")
+        .map((cell) => turndown.turndown(cell.innerHTML).trim().replace(/\|/g, "\\|").replace(/\n+/g, " ")),
+    );
+    const width = Math.max(0, ...rows.map((row) => row.length));
+    if (!width) return "";
+    const line = (row: string[]) => `| ${Array.from({ length: width }, (_, i) => row[i] ?? "").join(" | ")} |`;
+    return `\n\n${[line(rows[0]), line(Array(width).fill("---")), ...rows.slice(1).map(line)].join("\n")}\n\n`;
+  },
+});
 turndown.addRule("taskItem", {
   filter: (node) => node.nodeName === "LI" && node.getAttribute("data-type") === "taskItem",
   replacement: (content, node) => `- [${(node as HTMLElement).getAttribute("data-checked") === "true" ? "x" : " "}] ${content.trim().replace(/\n+/g, " ")}\n`,

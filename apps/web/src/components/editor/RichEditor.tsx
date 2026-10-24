@@ -36,7 +36,7 @@ const proseClass =
 export const isEmptyHtml = (html: string) => !html || (html.replace(/<[^>]*>/g, "").trim() === "" && !/<(img|video)\b/.test(html));
 
 const markdownOf = (editor: Editor): string =>
-  (editor.storage as { markdown: { getMarkdown: () => string } }).markdown.getMarkdown();
+  (editor.storage as unknown as { markdown: { getMarkdown: () => string } }).markdown.getMarkdown();
 
 interface RichEditorProps {
   /** Initial content — the editor is uncontrolled; remount (via key) to reset it. */
@@ -152,7 +152,7 @@ export function RichEditor({ value, onChange, placeholder, autofocus, className,
     if (source === null) {
       setSource(markdownOf(editor));
     } else {
-      editor.commands.setContent(source, true); // tiptap-markdown parses Markdown in setContent
+      editor.commands.setContent(source, { emitUpdate: true }); // tiptap-markdown parses Markdown in setContent
       setSource(null);
       editor.commands.focus("end");
     }
@@ -206,7 +206,7 @@ export function RichEditor({ value, onChange, placeholder, autofocus, className,
           onChange={(e) => {
             setSource(e.target.value);
             // Keep the hidden rich document (and the parent's draft) in sync while editing Markdown.
-            editor?.commands.setContent(e.target.value, true);
+            editor?.commands.setContent(e.target.value, { emitUpdate: true });
           }}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {

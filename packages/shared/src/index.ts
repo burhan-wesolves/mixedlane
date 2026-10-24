@@ -5,3 +5,4 @@ export * from "./github";
 export * from "./auth";
 export * from "./collab";
 export * from "./agents";
+export * from "./whatsapp";

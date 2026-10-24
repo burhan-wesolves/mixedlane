@@ -59,10 +59,10 @@ export class ProjectsService {
       .from(workItems)
       .where(eq(workItems.orgId, orgId));
     return all.map((p) => {
-      // Progress counts work below the top level of the hierarchy (or everything if flat).
+      // Container goals do not count as work, but top-level tasks and stories do.
       const top = sortTypes(p.itemTypes)[0];
       const mine = items.filter((i) => i.projectId === p.id);
-      const work = p.itemTypes.length > 1 ? mine.filter((i) => i.type !== top) : mine;
+      const work = p.itemTypes.length > 1 && (top === "epic" || top === "milestone") ? mine.filter((i) => i.type !== top) : mine;
       const cat = (s: string) => categoryOf(p.statuses, s);
       return {
         ...toProjectDto(p),

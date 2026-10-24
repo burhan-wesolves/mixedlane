@@ -94,7 +94,8 @@ export class OAuthService {
     const origin = originOf(req);
     return {
       issuer: origin,
-      authorization_endpoint: `${this.webOrigin(req)}/oauth/authorize`,
+      // Keep discovery issuer-bound even when the development consent UI runs on another port.
+      authorization_endpoint: `${origin}/api/oauth/authorize`,
       token_endpoint: `${origin}/api/oauth/token`,
       registration_endpoint: `${origin}/api/oauth/register`,
       response_types_supported: ["code"],

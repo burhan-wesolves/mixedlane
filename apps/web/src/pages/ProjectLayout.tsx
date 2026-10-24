@@ -40,14 +40,14 @@ export function ProjectLayout() {
   return (
     <ProjectScope project={project}>
       <div className="flex min-h-0 flex-1 flex-col">
-        <header className="shrink-0 border-b px-6 pt-5">
+        <header className="shrink-0 border-b bg-card/40 px-4 pt-5 sm:px-6">
           <div className="flex items-center gap-3">
             <ProjectIcon icon={project.icon} color={project.color} size="md" />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h1 className="truncate text-lg leading-tight font-semibold tracking-tight">{project.name}</h1>
               <p className="truncate text-xs text-muted-foreground">{project.description || project.key}</p>
             </div>
-            <span className="ml-auto rounded-full border px-2 py-0.5 text-xs text-muted-foreground" title="Your access to this project">
+            <span className="ml-auto hidden shrink-0 rounded-full border px-2 py-0.5 text-xs text-muted-foreground sm:inline" title="Your access to this project">
               {PROJECT_ROLE_LABELS[project.access.role]}
             </span>
             {project.access.permissions.includes("item.create") && (
@@ -56,7 +56,7 @@ export function ProjectLayout() {
               </Button>
             )}
           </div>
-          <nav className="mt-4 flex gap-1">
+          <nav aria-label="Project views" className="mt-4 flex gap-1 overflow-x-auto scroll-thin">
             {tabs.map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={label}
@@ -64,7 +64,7 @@ export function ProjectLayout() {
                 end={end}
                 className={({ isActive }) =>
                   cn(
-                    "-mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground",
+                    "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 pb-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground",
                     isActive && "border-primary font-medium text-foreground",
                   )
                 }
