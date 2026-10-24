@@ -105,7 +105,11 @@ export class AuthService {
     if (taken) throw new AppError(409, "An account with this email already exists — sign in instead");
     const passwordHash = await hashPassword(input.password);
     const issued = await this.db.transaction(async (tx) => {
-      const [user] = await tx.insert(users).values({ email: input.email, name: input.name, passwordHash }).returning();
+      const [user] = await tx.insert(users).values({
+        email: input.email, name: input.name, passwordHash,
+        // Installations without email delivery must not ask users to follow an undeliverable link.
+        emailVerifiedAt: config().MAIL_HOST ? null : new Date(),
+      }).returning();
       await this.orgs.create(user.id, input.orgName, undefined, tx);
       return { user, session: await this.issue(user, meta, undefined, tx) };
     });

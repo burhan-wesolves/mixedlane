@@ -1,7 +1,10 @@
 import request from "supertest";
-import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq, sql } from "drizzle-orm";
+import nodemailer from "nodemailer";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { resetConfig } from "../src/core/config";
 import { DB, type Db } from "../src/core/database/database";
+import { authTokens } from "../src/core/database/schema";
 import { JobsService } from "../src/core/jobs/jobs.service";
 import { MailService } from "../src/core/mail";
 import { PASSWORD, bootApp, signIn, signUp, type TestApp } from "./harness";
@@ -10,14 +13,18 @@ let ctx: TestApp;
 let db: Db;
 let mail: MailService;
 let jobs: JobsService;
+const mailHost = "smtp.example.test";
 beforeAll(async () => {
-  ctx = await bootApp();
+  const transport = nodemailer.createTransport({ jsonTransport: true });
+  vi.spyOn(nodemailer, "createTransport").mockReturnValue(transport);
+  ctx = await bootApp({ MAIL_HOST: mailHost, MAIL_USERNAME: "", MAIL_PASSWORD: "" });
   db = ctx.app.get(DB);
   mail = ctx.app.get(MailService);
   jobs = ctx.app.get(JobsService);
 });
 afterAll(async () => {
   await ctx.app.close();
+  vi.restoreAllMocks();
 });
 
 /** Delivers queued mail and returns the newest message for an address. */
@@ -32,6 +39,22 @@ const refreshCookie = (res: request.Response) =>
   ([] as string[]).concat(res.headers["set-cookie"] ?? []).find((c) => c.startsWith("ml_rt="))?.split(";")[0] ?? "";
 
 describe("register & login", () => {
+  it("automatically verifies signup without SMTP and does not queue a verification email", async () => {
+    resetConfig({ MAIL_HOST: "" });
+    try {
+      const { user } = await signUp(ctx);
+      expect((await user.get("/api/auth/me")).body.user.emailVerified).toBe(true);
+      expect((await ctx.http().post("/api/auth/login").send({ email: user.email, password: PASSWORD })).body.user.emailVerified).toBe(true);
+      const tokens = await db.select().from(authTokens).where(eq(authTokens.userId, user.id));
+      expect(tokens).toEqual([]);
+      await user.post("/api/auth/resend-verification").expect(204);
+      await jobs.drain();
+      expect(mail.outbox.some((m) => m.to === user.email)).toBe(false);
+    } finally {
+      resetConfig({ MAIL_HOST: mailHost });
+    }
+  });
+
   it("registers a user with their own org and returns a working access token", async () => {
     const res = await ctx.http().post("/api/auth/register").send({ name: "Ann", email: "Ann@Example.com", password: PASSWORD, orgName: "Acme Inc" });
     expect(res.status).toBe(201);
@@ -100,12 +123,16 @@ describe("refresh token rotation", () => {
 describe("email flows", () => {
   it("verifies email via the emailed link", async () => {
     const { user } = await signUp(ctx);
+    expect((await user.get("/api/auth/me")).body.user.emailVerified).toBe(false);
     const msg = await lastMailTo(user.email);
     expect(msg.subject).toMatch(/Confirm your email/);
-    await ctx.http().post("/api/auth/verify-email").send({ token: tokenFrom(msg.text) }).expect(204);
+    await user.post("/api/auth/resend-verification").expect(204);
+    const resent = await lastMailTo(user.email);
+    expect(tokenFrom(resent.text)).not.toBe(tokenFrom(msg.text));
+    await ctx.http().post("/api/auth/verify-email").send({ token: tokenFrom(resent.text) }).expect(204);
     expect((await user.get("/api/auth/me")).body.user.emailVerified).toBe(true);
     // Links are single-use.
-    await ctx.http().post("/api/auth/verify-email").send({ token: tokenFrom(msg.text) }).expect(400);
+    await ctx.http().post("/api/auth/verify-email").send({ token: tokenFrom(resent.text) }).expect(400);
   });
 
   it("resets a forgotten password and signs out other sessions", async () => {
