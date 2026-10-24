@@ -19,8 +19,13 @@ const schema = z.object({
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).default(5 * 60),
   /** Default "Stay signed in for" (days) — each user can change theirs in Account settings. */
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(30),
-  /** e.g. smtps://user:pass@smtp.example.com:465 — when unset, emails are printed to the console. */
-  SMTP_URL: z.string().optional(),
+  /** SMTP server hostname. When unset, new accounts are verified automatically and other mail is logged. */
+  MAIL_HOST: z.string().trim().min(1).optional(),
+  MAIL_PORT: z.coerce.number().int().min(1).max(65535).default(465),
+  MAIL_USERNAME: z.string().optional(),
+  MAIL_PASSWORD: z.string().optional(),
+  /** Immediate TLS (usually true on port 465); false allows STARTTLS on compatible servers. */
+  MAIL_SSL: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
   MAIL_FROM: z.string().default("Mixedlane <no-reply@mixedlane.local>"),
   /** Requests per minute per IP on sensitive auth endpoints. */
   AUTH_RATE_LIMIT: z.coerce.number().int().min(1).default(20),
@@ -68,6 +73,10 @@ const schema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((v) => v === "true"),
+}).superRefine((cfg, ctx) => {
+  if (cfg.MAIL_HOST && !!cfg.MAIL_USERNAME !== !!cfg.MAIL_PASSWORD) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [cfg.MAIL_USERNAME ? "MAIL_PASSWORD" : "MAIL_USERNAME"], message: "Set both MAIL_USERNAME and MAIL_PASSWORD, or leave both unset for an unauthenticated SMTP relay" });
+  }
 });
 
 export type Config = z.infer<typeof schema>;

@@ -25,7 +25,7 @@ export function actionEmail(opts: { to: string; subject: string; intro: string; 
 }
 
 /**
- * Emails are queued as jobs (retries, doesn't block requests). Without SMTP_URL they're printed to
+ * Emails are queued as jobs (retries, doesn't block requests). Without MAIL_HOST they're printed to
  * the console and kept in `outbox` so dev and tests can follow links.
  */
 @Injectable()
@@ -37,8 +37,13 @@ export class MailService implements OnModuleInit {
   constructor(private readonly jobs: JobsService) {}
 
   onModuleInit() {
-    const url = config().SMTP_URL;
-    if (url) this.transport = nodemailer.createTransport(url);
+    const cfg = config();
+    if (cfg.MAIL_HOST) this.transport = nodemailer.createTransport({
+      host: cfg.MAIL_HOST,
+      port: cfg.MAIL_PORT,
+      secure: cfg.MAIL_SSL,
+      ...(cfg.MAIL_USERNAME ? { auth: { user: cfg.MAIL_USERNAME, pass: cfg.MAIL_PASSWORD } } : {}),
+    });
     this.jobs.register("mail.send", (payload) => this.deliver(payload as unknown as Mail));
   }
 
