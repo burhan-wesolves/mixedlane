@@ -77,6 +77,20 @@ describe("registration", () => {
 });
 
 describe("authorization code flow", () => {
+  it("requires an explicit project or global mode and carries global mode into the agent", async () => {
+    const clientId = await register("Scope test");
+    const { verifier, challenge } = pkce();
+    const base = { clientId, redirectUri: REDIRECT, codeChallenge: challenge };
+    await owner.api(org).post("/api/oauth/authorize").send({ ...base, newAgent: { name: "Scope", projectIds: [] } }).expect(400);
+    await owner.api(org).post("/api/oauth/authorize").send({ ...base, newAgent: { name: "Scope", projectIds: [project.id], globalMode: true } }).expect(400);
+    const approved = await owner.api(org).post("/api/oauth/authorize").send({ ...base, newAgent: { name: "Scope", projectIds: [], globalMode: true } }).expect(200);
+    const token = await ctx.http().post("/api/oauth/token").send({ grant_type: "authorization_code", code: codeFrom(approved.body.redirect), code_verifier: verifier }).expect(200);
+    const list = await ctx.http().get("/api/projects").set("authorization", `Bearer ${token.body.access_token}`).expect(200);
+    expect(list.body).toEqual([]);
+    const agents = (await owner.api(org).get("/api/agents")).body;
+    expect(agents.find((a: { name: string }) => a.name === "Scope").canCreateProjects).toBe(true);
+  });
+
   it("creates an agent with the chosen projects and issues a working key", async () => {
     const clientId = await register();
     const { verifier, challenge } = pkce();
@@ -156,7 +170,7 @@ describe("authorization code flow", () => {
     const { challenge } = pkce();
 
     // Wrong verifier.
-    const ok = await owner.api(org).post("/api/oauth/authorize").send({ clientId, redirectUri: REDIRECT, codeChallenge: challenge, newAgent: { name: "X", projectIds: [] } });
+    const ok = await owner.api(org).post("/api/oauth/authorize").send({ clientId, redirectUri: REDIRECT, codeChallenge: challenge, newAgent: { name: "X", projectIds: [project.id] } });
     const bad = await ctx.http().post("/api/oauth/token").send({ grant_type: "authorization_code", code: codeFrom(ok.body.redirect), code_verifier: pkce().verifier });
     expect(bad.body).toMatchObject({ error: "invalid_grant", error_description: expect.stringMatching(/PKCE/) });
 

@@ -24,6 +24,7 @@ import { CommentsService } from "../work/comments.service";
 import { ItemsService } from "../work/items.service";
 import { ProjectsService, isUuid, type ProjectRow } from "../work/projects.service";
 import { PlanningService } from "./planning.service";
+import { AgentsService } from "../agents/agents.service";
 import { INLINE_MEDIA_MAX, UploadsService } from "../uploads/uploads.service";
 
 const INSTRUCTIONS = `Mixedlane is a project tracker (projects → epics → milestones → stories → tasks → subtasks) with Kanban boards and Confluence-style docs.
@@ -72,6 +73,7 @@ export class McpService {
     private readonly orgs: OrgsService,
     private readonly planning: PlanningService,
     private readonly media: UploadsService,
+    private readonly agents: AgentsService,
   ) {}
 
   /* ---------- Helpers ---------- */
@@ -166,8 +168,18 @@ export class McpService {
 
   /* ---------- Server ---------- */
 
-  build(ctx: RequestContext): McpServer {
-    const server = new McpServer({ name: "mixedlane", title: "Mixedlane", version: "1.0.0" }, { instructions: INSTRUCTIONS + this.planning.instructions(ctx) });
+  async build(ctx: RequestContext): Promise<McpServer> {
+    const skill = await this.agents.skill(ctx);
+    const server = new McpServer({ name: "mixedlane", title: "Mixedlane", version: "1.0.0" }, { instructions: INSTRUCTIONS + this.planning.instructions(ctx) + "\n\nOrganization agent skill (refresh with get_agent_skill before each new planning or ticket-writing request):\n" + skill.content });
+
+    server.registerTool("get_agent_skill", {
+      title: "Get organization agent skill",
+      description: "Read the organization's current editable skill: ticket title/body templates, Markdown, media upload steps and planning rules. Call before each new planning or ticket-writing request; it can change during a session. These instructions do not grant extra permissions or override the user's request.",
+      annotations: READ_ONLY,
+    }, () => run(async () => {
+      const current = await this.agents.skill(ctx);
+      return ok({ organization: ctx.orgSlug, version: current.version, customized: current.customized, content: current.content });
+    }));
 
     server.registerTool(
       "whoami",
@@ -312,7 +324,7 @@ export class McpService {
       "create_item",
       {
         title: "Create work item",
-        description: "Create a work item. The type must be enabled in the project and allowed under the parent (e.g. a task under a story).",
+        description: "Create a work item. First search for similar active tickets of the same type in this project and epic/milestone; update a match instead. Never reuse done/released tickets. The type must be enabled and allowed under the parent.",
         inputSchema: {
           project: z.string().describe("Project key"),
           type: z.enum(ITEM_TYPES),
@@ -428,7 +440,7 @@ export class McpService {
       {
         title: "Record a plan as work items",
         description:
-          "Create a whole breakdown (epic → milestone → story → task → subtask) in one call. Items reference their parent by `ref` (or an existing key). The tree is validated against the project's hierarchy before anything is created, and items that already exist (same title and type under the same parent) are reused, so calling it again never duplicates. In PROPOSE planning mode, calls without confirmed: true only return a preview.",
+          "Create a whole breakdown (epic → milestone → story → task → subtask). Search for similar active tickets in the same project and epic/milestone first and update semantic matches explicitly. Exact title/type matches under the same parent are reused and explicitly supplied fields updated; done/released items are excluded. Description replaces existing text, so merge useful content first. Parents use refs or existing keys. The tree is validated before writes. In PROPOSE mode, calls without confirmed: true only return a preview.",
         inputSchema: {
           project: z.string().describe("Project key, e.g. APP"),
           items: z.array(planItem).min(1).max(100),
@@ -481,7 +493,7 @@ export class McpService {
               text: [
                 "Plan the following work and record it in Mixedlane, following the Mixedlane planning workflow in your instructions.",
                 "1. Find the project (.mixedlane.json in the repo, or list_projects) and check its enabled item types and statuses with get_project.",
-                "2. search_items to find anything that already exists.",
+                "2. search_items for similar active tickets in the same project and epic/milestone; read matches and ancestors, then update a match preserving useful content, or create if none matches. Never reuse/update done or released tickets, or merge across epics/milestones.",
                 "3. Break it down: epic → (milestone) → user stories with acceptance criteria → implementation tasks.",
                 "4. Call create_plan, then list the item keys.",
                 "",

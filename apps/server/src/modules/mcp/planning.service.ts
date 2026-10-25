@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { TYPE_LABELS, allowedParentTypes, canHaveParent, type ItemType, type Priority, type ProjectAccessInfo, type WorkItemSummary } from "@mixedlane/shared";
+import { TYPE_LABELS, allowedParentTypes, canHaveParent, type ItemType, type ItemUpdate, type Priority, type ProjectAccessInfo, type WorkItemSummary } from "@mixedlane/shared";
 import { config } from "../../core/config";
 import type { RequestContext } from "../../core/context";
 import { AppError } from "../../core/http";
@@ -59,6 +59,7 @@ export class PlanningService {
       "- Whenever you make a plan, break down requirements, or are asked to build something non-trivial, record the work in Mixedlane with create_plan:",
       "  epic (the outcome) → milestone (if the project uses them) → user story (user value; acceptance criteria as a `- [ ]` checklist) → task (an implementation step) → subtask.",
       "  Use only the item types enabled in the project (list_projects / get_project). search_items first and reuse existing items instead of duplicating them. If the repository has a .mixedlane.json, use its project.",
+      "- Before every create_item or create_plan, search for similar tickets of the same type in the selected project and epic/milestone. Compare meaning and acceptance criteria, not just titles. Update a matching active ticket with update_item, preserving useful content; create only when none matches. Never reuse, update or reopen done/released tickets. Keep different epics and milestones separate; if several active matches are plausible, ask which to use. create_plan only matches exact titles under the same parent, so handle semantic matches explicitly first.",
       ctx.agent?.canCreateProjects === false
         ? "- If no existing project fits, you can't create one: ask the user which project to use (an org admin can allow project creation for you in Settings → AI agents)."
         : "- If no existing project fits a new initiative, create one with create_project (short 2-5 letter key, enable only the levels it needs), then plan into it. If it's unclear whether the work belongs in an existing project, ask.",
@@ -141,7 +142,10 @@ export class PlanningService {
       // Idempotency: same title + type under the same (existing) parent → reuse.
       const title = it.title.trim().toLowerCase();
       const siblings = parentRef && !parentExisting ? [] : all.filter((x) => (x.parentId ?? null) === (parentExisting?.id ?? null));
-      const match = siblings.find((x) => x.type === it.type && x.title.trim().toLowerCase() === title) ?? null;
+      const match = siblings.find((x) => {
+        const status = project.statuses.find((s) => s.id === x.status);
+        return x.type === it.type && x.title.trim().toLowerCase() === title && status?.category !== "done" && !/\b(done|released?)\b/i.test(`${x.status} ${status?.name ?? ""}`);
+      }) ?? null;
       const p: Planned = { item: it, parentType, parentExisting, parentRef, match };
       planned.set(it.ref, p);
       return p;
@@ -157,11 +161,30 @@ export class PlanningService {
       throw new AppError(403, "You don't have permission to create items in this project");
     }
 
+    // Check all requested edits before writing. Omitted fields retain their current values.
+    const updates = new Map<string, ItemUpdate>();
+    for (const p of order) {
+      if (!p.match) continue;
+      const current = await this.items.get(ctx.orgId, p.match.id);
+      const patch: ItemUpdate = {};
+      if (p.item.description !== undefined) {
+        const description = markdownToHtml(p.item.description);
+        if (description !== current.description) patch.description = description;
+      }
+      if (p.item.priority !== undefined && p.item.priority !== current.priority) patch.priority = p.item.priority;
+      if (p.item.estimate !== undefined && p.item.estimate !== current.estimate) patch.estimate = p.item.estimate;
+      if (p.item.labels !== undefined && JSON.stringify(p.item.labels) !== JSON.stringify(current.labels)) patch.labels = p.item.labels;
+      if (Object.keys(patch).length) updates.set(p.item.ref, patch);
+    }
+    if (updates.size && !preview && !this.can(access, "item.update")) throw new AppError(403, "You don't have permission to update existing items in this project");
+
     const keys = new Map<string, { key: string; id: string }>();
     const results: { ref: string; key: string | null; type: ItemType; title: string; parent: string | null; outcome: Outcome; url: string | null }[] = [];
     for (const p of order) {
       const parentKey = p.parentExisting?.key ?? (p.parentRef ? (keys.get(p.parentRef)?.key ?? `(${p.parentRef})`) : null);
       if (p.match) {
+        const patch = updates.get(p.item.ref);
+        if (patch && !preview) await this.items.update(ctx.orgId, p.match.id, patch, ctx.actor);
         keys.set(p.item.ref, { key: p.match.key, id: p.match.id });
         results.push({ ref: p.item.ref, key: p.match.key, type: p.item.type, title: p.match.title, parent: parentKey, outcome: preview ? "exists" : "existing", url: this.url(ctx, project, p.match) });
         continue;
@@ -198,9 +221,10 @@ export class PlanningService {
             preview: true,
             next: "PROPOSE mode: show this breakdown to the user. Only after they approve, call create_plan again with the same items and confirmed: true.",
             willCreate: count("will_create"),
+            willUpdate: updates.size,
             alreadyExists: count("exists"),
           }
-        : { created: count("created"), reused: count("existing") }),
+        : { created: count("created"), reused: count("existing"), updated: updates.size }),
       items: results,
     };
   }

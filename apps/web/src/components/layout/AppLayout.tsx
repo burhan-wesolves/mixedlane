@@ -58,7 +58,7 @@ export function AppLayout() {
   const navigate = useNavigate();
   const { data: projects = [] } = useProjects();
   const { user } = useAuth();
-  const { can } = useOrg();
+  const { org, can } = useOrg();
   const { dark, toggle } = useTheme();
   const openCreate = useCreateItemDialog();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -174,7 +174,7 @@ export function AppLayout() {
         </nav>
 
         <div className={cn("space-y-1 border-t border-sidebar-border p-3", collapsed && "px-2")}>
-          {can("agent.manage") && (
+          {org && (
             <NavLink aria-label="AI agents" to={paths.orgSettings("agents")} className={({ isActive }) => cn(navItem(isActive), "w-full")}>
               <Bot className="size-4" />
               {!collapsed && "AI agents"}

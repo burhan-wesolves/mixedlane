@@ -64,6 +64,19 @@ describe("agent management", () => {
 });
 
 describe("API key authentication", () => {
+  it("project-scoped creation grants only the selected project and blocks project creation", async () => {
+    const created = await owner.api(org).post("/api/agents").send({ name: "Scoped agent", projectId: project.id }).expect(201);
+    expect(created.body.agent.canCreateProjects).toBe(false);
+    expect(created.body.agent.grants.map((g: { projectId: string }) => g.projectId)).toEqual([project.id]);
+    expect((await asAgent(created.body.key.secret).get("/api/projects")).body.map((p: { key: string }) => p.key)).toEqual(["APP"]);
+    await asAgent(created.body.key.secret).post("/api/projects").send({ name: "Forbidden", key: "FORB" }).expect(403);
+    await owner.api(org).post("/api/agents").send({ name: "Invalid scope", projectId: project.id, globalMode: true }).expect(400);
+    const global = await owner.api(org).post("/api/agents").send({ name: "Global agent", globalMode: true }).expect(201);
+    expect(global.body.agent.canCreateProjects).toBe(true);
+    await owner.api(org).delete(`/api/agents/${created.body.agent.id}`).expect(204);
+    await owner.api(org).delete(`/api/agents/${global.body.agent.id}`).expect(204);
+  });
+
   it("sees nothing until granted, then exactly what the toggles allow", async () => {
     expect((await asAgent().get("/api/projects")).body).toEqual([]);
     await grant(["item.create", "comment.create"]).expect(200);

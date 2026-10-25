@@ -71,6 +71,8 @@ export const orgs = pgTable("orgs", {
   id: id(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  agentSkill: text("agent_skill"),
+  agentSkillVersion: integer("agent_skill_version").notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -481,7 +483,7 @@ export const oauthCodes = pgTable(
     /** The existing agent to act as — or null when a new one is created on redemption. */
     agentId: uuid("agent_id").references(() => agents.id, { onDelete: "cascade" }),
     /** A new agent to create when (and only if) the client redeems the code. */
-    newAgent: jsonb("new_agent").$type<{ name: string; projectIds: string[] } | null>(),
+    newAgent: jsonb("new_agent").$type<{ name: string; projectIds: string[]; globalMode?: boolean } | null>(),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     redirectUri: text("redirect_uri").notNull(),
     codeChallenge: text("code_challenge").notNull(),

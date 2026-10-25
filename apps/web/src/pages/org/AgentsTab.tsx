@@ -40,6 +40,8 @@ import { AGENT_PRESETS, MCP_CLIENTS, uniqueAgentName } from "@/lib/mcp-clients";
 import { paths } from "@/lib/project";
 import { cn } from "@/lib/utils";
 import { copyText } from "@/lib/clipboard";
+import { useOrg } from "@/lib/auth";
+import { AgentSkillSettings } from "./AgentSkillSettings";
 
 const onError = (e: Error) => toast.error(e.message);
 const DOC_ACCESS: Record<AgentDocAccess, string> = {
@@ -64,14 +66,19 @@ function useAgentsMutation<T, V>(fn: (v: V) => Promise<T>, onSuccess?: (t: T) =>
 
 /** Org settings → AI agents: identities with API keys, per-project permission toggles, MCP setup. */
 export function AgentsTab() {
-  const { data: agents, isLoading } = useQuery({ queryKey: ["agents"], queryFn: api.agents.list });
+  const { can, org } = useOrg();
+  const canManage = can("agent.manage");
+  const { data: agents, isLoading } = useQuery({ queryKey: ["agents"], queryFn: api.agents.list, enabled: canManage });
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<{ agent: string; key: CreatedApiKey } | null>(null);
   const open = agents?.find((a) => a.id === openId) ?? null;
 
+  if (!canManage) return <AgentSkillSettings key={org?.id} />;
+
   return (
     <div className="space-y-6">
+      <AgentSkillSettings key={org?.id} />
       <div className="flex flex-wrap items-start gap-4 rounded-xl border bg-gradient-to-br from-violet-500/10 via-transparent to-fuchsia-500/10 p-5">
         <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow">
           <Bot className="size-5" />
@@ -141,6 +148,8 @@ function CreateAgentDialog({
 }) {
   const [presetId, setPresetId] = useState(AGENT_PRESETS[0].clientId);
   const [description, setDescription] = useState("");
+  const { data: projects } = useProjects();
+  const [scope, setScope] = useState("");
   const preset = AGENT_PRESETS.find((p) => p.clientId === presetId) ?? AGENT_PRESETS[0];
   const name = uniqueAgentName(preset.name, existingNames);
   const create = useAgentsMutation(api.agents.create, ({ agent, key }) => {
@@ -160,13 +169,13 @@ function CreateAgentDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>New AI agent</DialogTitle>
-          <DialogDescription>It starts with no project access — you choose what it can see and do next.</DialogDescription>
+          <DialogDescription>Choose the project this agent will plan and track work in.</DialogDescription>
         </DialogHeader>
         <form
           className="grid gap-4"
           onSubmit={(e) => {
             e.preventDefault();
-            create.mutate({ name, description });
+            create.mutate({ name, description, ...(scope === "global" ? { globalMode: true } : { projectId: scope }) });
           }}
         >
           <div className="grid gap-1.5">
@@ -185,11 +194,22 @@ function CreateAgentDialog({
             </Select>
           </div>
           <div className="grid gap-1.5">
+            <Label>Project scope</Label>
+            <Select value={scope} onValueChange={setScope}>
+              <SelectTrigger><SelectValue placeholder="Select a project" /></SelectTrigger>
+              <SelectContent>
+                {(projects ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.key} · {p.name}</SelectItem>)}
+                <SelectItem value="global">Global mode</SelectItem>
+              </SelectContent>
+            </Select>
+            {scope === "global" && <p role="alert" className="rounded-lg border border-destructive p-3 text-xs text-destructive">Danger: global mode allows the agent to create multiple projects. Existing projects still require explicit access grants.</p>}
+          </div>
+          <div className="grid gap-1.5">
             <Label htmlFor="agent-desc">What does it do?</Label>
             <Textarea id="agent-desc" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Labels and prioritizes new bugs" />
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={create.isPending}>
+            <Button type="submit" disabled={create.isPending || !scope}>
               Create agent
             </Button>
           </DialogFooter>
@@ -243,8 +263,8 @@ export function ConnectSnippets({ secret }: { secret?: string }) {
     }
   });
   const client = MCP_CLIENTS.find((c) => c.id === clientId) ?? MCP_CLIENTS[0];
-  // The plugin (hooks + skills + agent) is the recommended way; right after creating a key, show key setup.
-  const [mode, setMode] = useState<"plugin" | "oauth" | "key">(secret ? "key" : "plugin");
+  // Keep hooks and skills visible during setup; API-key instructions remain a separate option.
+  const [mode, setMode] = useState<"plugin" | "oauth" | "key">("plugin");
   const plugins = useQuery({ queryKey: ["plugins"], queryFn: api.plugins.list, staleTime: 5 * 60_000 });
   const plugin = client.plugin ? plugins.data?.find((p) => p.id === client.plugin) : undefined;
   const usePlugin = mode === "plugin" && !!client.plugin;
@@ -303,6 +323,12 @@ export function ConnectSnippets({ secret }: { secret?: string }) {
             </button>
           ))}
         </div>
+      )}
+      {!usePlugin && client.plugin && (
+        <p className="rounded-lg border p-3 text-xs text-muted-foreground">
+          MCP provides the tools. Install the plugin too for skills and hooks that guide project selection, ticket checks and progress updates.{" "}
+          <button className="text-primary underline" onClick={() => setMode("plugin")}>Install hooks + skills</button>
+        </p>
       )}
       {usePlugin && (
         <div className="space-y-3">
@@ -445,7 +471,7 @@ function AgentSheet({ agent, onClose, onKey }: { agent: Agent; onClose: () => vo
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">Can create projects</span>
                 <span className="block text-xs text-muted-foreground">
-                  Lets it start a new project when a plan needs one. It gets full access to projects it creates; everyone in the org sees them.
+                  Danger: global mode may create multiple projects. It gets full access to projects it creates; everyone in the org sees them.
                 </span>
               </span>
               <button

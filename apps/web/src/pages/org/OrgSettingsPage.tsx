@@ -34,8 +34,8 @@ const onError = (e: Error) => toast.error(e.message);
 
 export function OrgSettingsPage() {
   const { tab = "general" } = useParams();
-  const { org, can } = useOrg();
-  const tabs = TABS.filter((t) => t.id !== "agents" || can("agent.manage"));
+  const { org } = useOrg();
+  const tabs = TABS;
   if (!tabs.some((t) => t.id === tab)) return <Navigate to={paths.orgSettings()} replace />;
   return (
     <div className="flex-1 overflow-y-auto">

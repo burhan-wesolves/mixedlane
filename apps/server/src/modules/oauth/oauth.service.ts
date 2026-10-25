@@ -2,7 +2,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { Request } from "express";
 import { and, eq, gt, isNull } from "drizzle-orm";
-import { DEFAULT_AGENT_PERMISSIONS } from "@mixedlane/shared";
 import { config } from "../../core/config";
 import type { RequestContext } from "../../core/context";
 import { DB, type Db } from "../../core/database/database";
@@ -154,7 +153,7 @@ export class OAuthService {
    */
   async approve(
     ctx: RequestContext,
-    input: { clientId: string; redirectUri: string; codeChallenge: string; codeChallengeMethod?: string; state?: string; agentId?: string; newAgent?: { name: string; projectIds: string[] } },
+    input: { clientId: string; redirectUri: string; codeChallenge: string; codeChallengeMethod?: string; state?: string; agentId?: string; newAgent?: { name: string; projectIds: string[]; globalMode?: boolean } },
   ) {
     this.agents.assertManageable(ctx);
     const client = await this.client(input.clientId);
@@ -170,7 +169,12 @@ export class OAuthService {
     // sign-ins never leave half-configured agents behind.
     const agentId = input.agentId ?? null;
     if (agentId) await this.agents.get(ctx, agentId); // 404s for agents outside this org
-    const newAgent = agentId ? null : { name: (input.newAgent?.name?.trim() || client.name).slice(0, 80), projectIds: input.newAgent?.projectIds ?? [] };
+    const newAgent = agentId ? null : { name: (input.newAgent?.name?.trim() || client.name).slice(0, 80), projectIds: [...new Set(input.newAgent?.projectIds ?? [])], globalMode: input.newAgent?.globalMode ?? false };
+    if (newAgent) {
+      if (!newAgent.globalMode && newAgent.projectIds.length !== 1) throw new AppError(400, "Select one project or explicitly choose global mode");
+      if (newAgent.globalMode && newAgent.projectIds.length) throw new AppError(400, "Choose a project or global mode, not both");
+      for (const id of newAgent.projectIds) await this.access.project(ctx, id, "project.read");
+    }
 
     const code = randomBytes(32).toString("base64url");
     await this.db.insert(oauthCodes).values({
@@ -219,10 +223,7 @@ export class OAuthService {
       const existing = (await this.agents.list(ctx)).map((a) => a.name.toLowerCase());
       let name = spec.name;
       for (let i = 2; existing.includes(name.toLowerCase()); i++) name = `${spec.name} ${i}`;
-      const { agent } = await this.agents.create(ctx, { name, description: `Connected via OAuth (${client.name})`, docAccess: "read" });
-      for (const projectId of spec.projectIds) {
-        await this.agents.setGrant(ctx, agent.id, { projectId, permissions: [...DEFAULT_AGENT_PERMISSIONS] }).catch(() => undefined);
-      }
+      const { agent } = await this.agents.create(ctx, { name, description: `Connected via OAuth (${client.name})`, docAccess: "read", projectId: spec.projectIds[0], globalMode: spec.globalMode ?? false });
       // The key minted at creation isn't needed — this client gets its own key below.
       await this.agents.revokeKey(ctx, agent.id, agent.keys[0].id);
       agentId = agent.id;

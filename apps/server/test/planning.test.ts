@@ -36,7 +36,7 @@ beforeAll(async () => {
   ctx = await bootApp();
   ({ user: owner, org } = await signUp(ctx, { name: "Owner", orgName: "Planning" }));
   project = (await owner.api(org).post("/api/projects").send({ name: "App", key: "APP" })).body;
-  const created = (await owner.api(org).post("/api/agents").send({ name: "Codex" })).body;
+  const created = (await owner.api(org).post("/api/agents").send({ name: "Codex", globalMode: true })).body;
   agentId = created.agent.id;
   secret = created.key.secret;
   await owner
@@ -100,6 +100,64 @@ describe("create_plan", () => {
 });
 
 describe("planning mode", () => {
+  it("keeps milestones separate and never reuses Released tickets", async () => {
+    await owner.api(org).post("/api/projects").send({ name: "Milestones", key: "MILE", itemTypes: ["milestone", "task"] }).expect(201);
+    const c = await client();
+    // The global agent needs an explicit grant to this existing project.
+    const projects = (await owner.api(org).get("/api/projects")).body;
+    const milestoneProject = projects.find((p: { key: string }) => p.key === "MILE");
+    await owner.api(org).put(`/api/agents/${agentId}/grants`).send({ projectId: milestoneProject.id, permissions: ["item.create", "item.update", "item.move"] }).expect(200);
+    const plan = await call(c, "create_plan", { project: "MILE", items: [
+      { ref: "m1", type: "milestone", title: "Phase one" },
+      { ref: "m2", type: "milestone", title: "Phase two" },
+      { ref: "t1", parent: "m1", type: "task", title: "Same task" },
+      { ref: "t2", parent: "m2", type: "task", title: "Same task" },
+    ] });
+    expect(plan).toMatchObject({ created: 4, reused: 0 });
+    expect(plan.items[2].key).not.toBe(plan.items[3].key);
+    await c.close();
+
+    await owner.api(org).post("/api/projects").send({ name: "Released workflow", key: "REL", itemTypes: ["task"], statuses: [
+      { id: "todo", name: "To Do", color: "#64748b", category: "todo" },
+      { id: "release", name: "Released", color: "#10b981", category: "in_progress" },
+    ] }).expect(201);
+    const rel = (await owner.api(org).get("/api/projects")).body.find((p: { key: string }) => p.key === "REL");
+    await owner.api(org).put(`/api/agents/${agentId}/grants`).send({ projectId: rel.id, permissions: ["item.create", "item.update", "item.move"] }).expect(200);
+    const next = await client();
+    const task = await call(next, "create_item", { project: "REL", type: "task", title: "Released task", status: "release" });
+    const repeated = await call(next, "create_plan", { project: "REL", items: [{ ref: "t", type: "task", title: "Released task" }] });
+    expect(repeated).toMatchObject({ created: 1, reused: 0 });
+    expect(repeated.items[0].key).not.toBe(task.created);
+    await next.close();
+  });
+
+  it("updates active matches but creates new tickets for finished work and separate epics", async () => {
+    const c = await client();
+    const initial = await call(c, "create_plan", { project: "APP", items: [
+      { ref: "e", type: "epic", title: "Scoped reuse" },
+      { ref: "s", parent: "e", type: "story", title: "Scoped story" },
+      { ref: "t", parent: "s", type: "task", title: "Scoped task", description: "Original" },
+    ] });
+    const story = initial.items[1].key;
+    const task = initial.items[2].key;
+    const input = { project: "APP", items: [{ ref: "t", parent: story, type: "task", title: "Scoped task", description: "Updated requirements", priority: "high" }] };
+    const updated = await call(c, "create_plan", input);
+    expect(updated).toMatchObject({ created: 0, reused: 1, updated: 1 });
+    expect(updated.items[0].key).toBe(task);
+    expect(await call(c, "get_item", { key: task })).toMatchObject({ description: "Updated requirements", priority: "high" });
+    await call(c, "complete_work", { key: task, summary: "Finished", stage: "done" });
+    const next = await call(c, "create_plan", input);
+    expect(next).toMatchObject({ created: 1, reused: 0 });
+    expect(next.items[0].key).not.toBe(task);
+    const other = await call(c, "create_plan", { project: "APP", items: [
+      { ref: "e", type: "epic", title: "Another scoped epic" },
+      { ref: "s", parent: "e", type: "story", title: "Scoped story" },
+      { ref: "t", parent: "s", type: "task", title: "Scoped task" },
+    ] });
+    expect(other).toMatchObject({ created: 3, reused: 0 });
+    await c.close();
+  });
+
   it("PROPOSE returns a preview until confirmed, and is reported to the agent", async () => {
     await owner.api(org).patch(`/api/agents/${agentId}`).send({ planningMode: "propose" }).expect(200);
     const c = await client();

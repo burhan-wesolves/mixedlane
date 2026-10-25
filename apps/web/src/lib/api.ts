@@ -4,6 +4,7 @@ import type {
   AgentCreate,
   AgentPermission,
   AgentUpdate,
+  AgentSkill,
   ApiKeyInfo,
   CreatedApiKey,
   AuthResponse,
@@ -176,6 +177,8 @@ export const api = {
   },
   search: (q: string) => request<SearchResult>(`/search?q=${encodeURIComponent(q)}`),
   agents: {
+    skill: () => request<AgentSkill>("/agents/skill"),
+    updateSkill: (input: { content: string | null; version: number }) => request<AgentSkill>("/agents/skill", json("PUT", input)),
     list: () => request<Agent[]>("/agents"),
     get: (id: string) => request<Agent>(`/agents/${id}`),
     create: (input: AgentCreate) => request<{ agent: Agent; key: CreatedApiKey }>("/agents", json("POST", input)),
@@ -214,7 +217,7 @@ export const api = {
       codeChallengeMethod?: string;
       state?: string;
       agentId?: string;
-      newAgent?: { name: string; projectIds: string[] };
+      newAgent?: { name: string; projectIds: string[]; globalMode?: boolean };
     }) => request<{ redirect: string; agentId: string | null }>("/oauth/authorize", json("POST", input)),
   },
   notifications: {

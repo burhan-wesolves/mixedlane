@@ -71,6 +71,13 @@
       "when": 1792858700956,
       "tag": "0009_scoped_uploads",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792880000000,
+      "tag": "0010_org_agent_skill",
+      "breakpoints": true
     }
   ]
 }

@@ -73,6 +73,8 @@ describe("bundles", () => {
       const all = [...files.values()].join("\n");
       expect(all, client).not.toMatch(/\{\{[A-Z_]+\}\}/);
       expect(all, client).toContain(MCP);
+      expect(all, client).toContain("same epic and milestone");
+      expect(all, client).toContain("Never reuse, update, or reopen");
       const skills = [...files.keys()].filter((k) => k.endsWith("SKILL.md")).map((k) => k.split("/").at(-2)).sort();
       expect(skills, client).toEqual(["mixedlane-docs", "mixedlane-init", "mixedlane-planning", "mixedlane-work-tracking"]);
     }
