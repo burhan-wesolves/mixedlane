@@ -7,8 +7,10 @@ description: Keep Mixedlane items in sync while you work — move items to In Pr
 
 The board should always show what you are doing. Use the `mixedlane` MCP tools.
 
+Before each new ticket-writing request, call `get_agent_skill` for the organization's saved title/body templates, Markdown conventions and media-upload instructions. Apply them when creating or updating tickets; merge existing content rather than replacing useful notes. If unavailable, reconnect MCP and use the bundled planning skill's ticket boilerplates as a fallback.
+
 ## Starting an item
-1. Find the item (`search_items` or the key the user gave you). If the work isn't tracked yet, create it first with
+1. Find the item (`search_items` or the key the user gave you). Before creating any ticket, search for similar active work of the same type in the selected project and same epic/milestone (or same parent if those levels are absent). Read matching tickets and their ancestors; update a match while preserving useful content. Never reuse, update or reopen done/released tickets, and never merge work across epics/milestones. If the work isn't tracked yet, create it first with
    `create_plan` (see the `mixedlane-planning` skill).
 2. `start_work` with the key and a one-line note of your approach. It moves the item to the project's in-progress
    status (it never pulls finished work back).

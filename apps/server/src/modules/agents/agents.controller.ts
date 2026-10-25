@@ -1,6 +1,6 @@
 import { Controller, Delete, Get, Global, HttpCode, Module, Param, Patch, Post, Put } from "@nestjs/common";
 import { ApiBearerAuth, ApiHeader, ApiTags } from "@nestjs/swagger";
-import { agentCreateSchema, agentGrantSchema, agentUpdateSchema, apiKeyCreateSchema } from "@mixedlane/shared";
+import { agentCreateSchema, agentGrantSchema, agentUpdateSchema, agentSkillUpdateSchema, apiKeyCreateSchema } from "@mixedlane/shared";
 import type { z } from "zod";
 import { Ctx, type RequestContext } from "../../core/context";
 import { ZBody } from "../../core/zod-body";
@@ -13,6 +13,16 @@ import { AgentsService } from "./agents.service";
 @Controller("agents")
 export class AgentsController {
   constructor(private readonly agents: AgentsService) {}
+
+  @Get("skill")
+  skill(@Ctx() ctx: RequestContext) {
+    return this.agents.skill(ctx);
+  }
+
+  @Put("skill")
+  updateSkill(@Ctx() ctx: RequestContext, @ZBody(agentSkillUpdateSchema) body: z.output<typeof agentSkillUpdateSchema>) {
+    return this.agents.updateSkill(ctx, body);
+  }
 
   @Get()
   list(@Ctx() ctx: RequestContext) {

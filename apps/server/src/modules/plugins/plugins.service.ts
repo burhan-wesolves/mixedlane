@@ -6,7 +6,7 @@ import { notFound } from "../../core/http";
 
 /** Plugin sources: integrations/agent-plugins/shared (skills, rules, hook script, agent prompt). */
 const SOURCE = resolve(SERVER_ROOT, "..", "..", "integrations", "agent-plugins", "shared");
-const VERSION = "1.1.0";
+const VERSION = "1.3.0";
 
 export const PLUGIN_CLIENTS = ["claude-code", "codex", "copilot", "opencode", "pi"] as const;
 export type PluginClient = (typeof PLUGIN_CLIENTS)[number];

@@ -31,7 +31,7 @@ export class McpController {
     if (!accept.includes("text/event-stream") || !accept.includes("application/json")) {
       req.headers.accept = "application/json, text/event-stream";
     }
-    const server = this.mcp.build(ctx);
+    const server = await this.mcp.build(ctx);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => {
       void transport.close();

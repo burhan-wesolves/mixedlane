@@ -13,7 +13,7 @@ const approveSchema = z.object({
   codeChallengeMethod: z.literal("S256").default("S256"),
   state: z.string().max(2000).optional(),
   agentId: z.string().uuid().optional(),
-  newAgent: z.object({ name: z.string().trim().max(80), projectIds: z.array(z.string().uuid()).max(100).default([]) }).optional(),
+  newAgent: z.object({ name: z.string().trim().max(80), projectIds: z.array(z.string().uuid()).max(100).default([]), globalMode: z.boolean().optional() }).optional(),
 });
 
 /** OAuth errors use the RFC 6749 shape, not the app's `{ error: message }`. */

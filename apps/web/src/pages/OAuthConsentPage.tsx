@@ -109,7 +109,8 @@ export function OAuthConsentPage() {
   const allProjects = projects.data ?? [];
   const preset = AGENT_PRESETS.find((p) => p.clientId === presetId) ?? detectPreset(client.data.name);
   const newAgentName = uniqueAgentName(preset.name, (agents.data ?? []).map((a) => a.name));
-  const selected = projectIds ?? allProjects.map((p) => p.id);
+  const selected = projectIds ?? [];
+  const globalMode = selected.includes("global");
   const redirectHost = (() => {
     try {
       const u = new URL(redirectUri);
@@ -129,7 +130,7 @@ export function OAuthConsentPage() {
         codeChallenge,
         codeChallengeMethod: "S256",
         state,
-        ...(agentChoice === NEW ? { newAgent: { name: newAgentName, projectIds: selected } } : { agentId: agentChoice }),
+        ...(agentChoice === NEW ? { newAgent: { name: newAgentName, projectIds: globalMode ? [] : selected, globalMode } } : { agentId: agentChoice }),
       });
       window.location.href = redirect;
     } catch (err) {
@@ -213,7 +214,7 @@ export function OAuthConsentPage() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label>Projects it can work in</Label>
+                <Label>Project it can work in</Label>
                 <p className="text-xs text-muted-foreground">Read, create, edit, change status and comment (no deleting). Fine-tune later in Settings → AI agents.</p>
                 <div className="max-h-48 divide-y overflow-y-auto rounded-lg border">
                   {allProjects.map((p) => {
@@ -222,7 +223,9 @@ export function OAuthConsentPage() {
                       <button
                         key={p.id}
                         type="button"
-                        onClick={() => setProjectIds(on ? selected.filter((x) => x !== p.id) : [...selected, p.id])}
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => setProjectIds([p.id])}
                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50"
                       >
                         <span className={cn("flex size-4 items-center justify-center rounded border", on && "border-primary bg-primary text-primary-foreground")}>
@@ -246,10 +249,17 @@ export function OAuthConsentPage() {
                     </p>
                   )}
                 </div>
+                <button type="button" role="radio" aria-checked={globalMode} onClick={() => setProjectIds(["global"])} className={cn("rounded-lg border p-3 text-left text-sm", globalMode && "border-destructive")}>
+                  Global mode — allow project creation
+                </button>
+                {globalMode && <p role="alert" className="rounded-lg border border-destructive p-3 text-xs text-destructive">Danger: the agent may create multiple projects. Existing projects still require explicit access grants.</p>}
               </div>
             </>
           ) : (
-            <p className="text-xs text-muted-foreground">It gets exactly this agent's permissions. A new key named “OAuth · {client.data.name}” is added to the agent — revoke it any time.</p>
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <p>It gets this agent's existing project grants: {agents.data?.find((a) => a.id === agentChoice)?.grants.map((g) => g.projectKey).join(", ") || "No projects"}. Change these in Settings → AI agents. A new key named “OAuth · {client.data.name}” is added — revoke it any time.</p>
+              {agents.data?.find((a) => a.id === agentChoice)?.canCreateProjects && <p role="alert" className="text-destructive">Danger: this agent uses global mode and may create multiple projects.</p>}
+            </div>
           )}
 
           <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">

@@ -47,6 +47,8 @@ export const agentCreateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
   description: z.string().trim().max(500).default(""),
   docAccess: z.enum(AGENT_DOC_ACCESS).default("read"),
+  projectId: z.string().uuid().optional(),
+  globalMode: z.boolean().optional(),
 });
 export const agentUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
@@ -72,6 +74,19 @@ export const agentGrantSchema = z.object({
 
 export type AgentCreate = z.input<typeof agentCreateSchema>;
 export type AgentUpdate = z.input<typeof agentUpdateSchema>;
+
+/** Organization-wide instructions; null restores the bundled skill. Version prevents lost edits. */
+export const agentSkillUpdateSchema = z.object({
+  content: z.string().trim().min(1).max(100_000).nullable(),
+  version: z.number().int().min(0),
+});
+export interface AgentSkill {
+  content: string;
+  defaultContent: string;
+  customized: boolean;
+  version: number;
+  canEdit: boolean;
+}
 
 export interface ApiKeyInfo {
   id: string;

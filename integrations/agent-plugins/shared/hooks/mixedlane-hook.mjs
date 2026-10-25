@@ -15,7 +15,7 @@ const event = args.find((a) => a in EVENTS);
 const format = args.find((a) => ["claude", "codex", "copilot"].includes(a)) ?? "claude";
 
 /** Planning-ish prompts get a reminder; everything else stays quiet (no noise on every turn). */
-const PLANNING = /\b(plan|planning|roadmap|requirements?|spec|prd|features?|implement|build|scope|user stor(y|ies)|epics?|milestones?|break (it |this )?down|backlog|tickets?|todo list)\b/i;
+const PLANNING = /\b(plan|planning|roadmap|requirements?|spec|prd|features?|bugs?|tasks?|implement|build|scope|user stor(y|ies)|epics?|milestones?|break (it |this )?down|backlog|tickets?|todo list)\b/i;
 
 function readStdin() {
   if (process.stdin.isTTY) return Promise.resolve({});
@@ -75,10 +75,10 @@ function contextFor(input) {
   if (event === "prompt") {
     const prompt = String(input.prompt ?? input.user_prompt ?? "");
     if (!PLANNING.test(prompt)) return "";
-    return `Mixedlane: if this results in a plan or new requirements, record it with the mixedlane-planning skill (create_plan) per your planning mode${project?.project ? ` in project ${project.project}` : ""}, and track progress with start_work / complete_work.`;
+    return `Mixedlane: call get_agent_skill for the organization's current ticket templates, Markdown and media-upload instructions before planning or writing tickets. Record plans with the mixedlane-planning skill (create_plan) per your planning mode${project?.project ? ` in project ${project.project}` : ""}. Before creating any ticket, search for similar active work in the same project and epic/milestone; update a match, otherwise create. Never reuse or update done/released tickets or matches from another epic/milestone. Track progress with start_work / complete_work.`;
   }
   if (event === "plan-approved") {
-    return `Mixedlane: the plan was just approved. Before (or as the first step of) implementing it, record it in Mixedlane with the mixedlane-planning skill — create_plan with epic → stories → tasks${project?.project ? ` in project ${project.project}` : ""}, following your planning mode — then start_work on the first task.`;
+    return `Mixedlane: the plan was just approved. Search for similar active tickets in the same project and epic/milestone first; update matches and create only missing work. Never reuse or update done/released tickets. Record it with the mixedlane-planning skill — create_plan with epic → stories → tasks${project?.project ? ` in project ${project.project}` : ""}, following your planning mode — then start_work on the first task.`;
   }
   return "";
 }

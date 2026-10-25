@@ -3,9 +3,11 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import {
   AGENT_PERMISSIONS,
+  DEFAULT_AGENT_PERMISSIONS,
   type Agent,
   type AgentGrant,
   type AgentPermission,
+  type AgentSkill,
   type ApiKeyInfo,
   type CreatedApiKey,
 } from "@mixedlane/shared";
@@ -17,6 +19,7 @@ import { activity, agents, apiKeys, orgs, projectAccess, projects, users, workIt
 import { EventBus } from "../../core/events";
 import { AppError, notFound } from "../../core/http";
 import { sha256 } from "../auth/crypto";
+import { defaultAgentSkill } from "./default-skill";
 
 type AgentRow = typeof agents.$inferSelect;
 type KeyRow = typeof apiKeys.$inferSelect;
@@ -53,6 +56,23 @@ export class AgentsService {
     @Inject(DB) private readonly db: Db,
     private readonly events: EventBus,
   ) {}
+
+  async skill(ctx: RequestContext): Promise<AgentSkill> {
+    const [org] = await this.db.select({ content: orgs.agentSkill, version: orgs.agentSkillVersion }).from(orgs).where(eq(orgs.id, ctx.orgId));
+    if (!org) throw notFound("Organization");
+    const defaultContent = defaultAgentSkill();
+    return { content: org.content ?? defaultContent, defaultContent, customized: org.content !== null, version: org.version, canEdit: !!ctx.userId && !ctx.agent && ctx.orgRole !== "guest" };
+  }
+
+  async updateSkill(ctx: RequestContext, input: { content: string | null; version: number }): Promise<AgentSkill> {
+    if (!ctx.userId || ctx.agent || ctx.orgRole === "guest") throw new AppError(403, "Only organization owners, admins and members can edit the agent skill");
+    const [updated] = await this.db.update(orgs)
+      .set({ agentSkill: input.content, agentSkillVersion: input.version + 1 })
+      .where(and(eq(orgs.id, ctx.orgId), eq(orgs.agentSkillVersion, input.version)))
+      .returning({ id: orgs.id });
+    if (!updated) throw new AppError(409, "The agent skill changed since you opened it. Reload the saved skill and merge your edits.");
+    return this.skill(ctx);
+  }
 
   /* ---------- Authentication ---------- */
 
@@ -174,10 +194,16 @@ export class AgentsService {
   }
 
   async create(ctx: RequestContext, input: z.output<typeof agentCreateSchema>, reuseSecret?: string): Promise<{ agent: Agent; key: CreatedApiKey }> {
+    if (input.globalMode && input.projectId) throw new AppError(400, "Choose a project or global mode, not both");
+    if (input.projectId) {
+      const [project] = await this.db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, input.projectId), eq(projects.orgId, ctx.orgId)));
+      if (!project) throw new AppError(404, "Project not found in this organization");
+    }
     const [a] = await this.db
       .insert(agents)
-      .values({ orgId: ctx.orgId, name: input.name, description: input.description, docAccess: input.docAccess, createdBy: ctx.userId })
+      .values({ orgId: ctx.orgId, name: input.name, description: input.description, docAccess: input.docAccess, createdBy: ctx.userId, canCreateProjects: input.globalMode ?? false })
       .returning();
+    if (input.projectId) await this.setGrant(ctx, a.id, { projectId: input.projectId, permissions: [...DEFAULT_AGENT_PERMISSIONS] });
     const key = await this.createKey(ctx, a.id, { name: "Default key" }, reuseSecret);
     return { agent: await this.get(ctx, a.id), key };
   }

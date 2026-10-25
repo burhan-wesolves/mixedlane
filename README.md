@@ -206,6 +206,12 @@ How the tools behave:
 
 **Agent plugins (recommended).** Settings → AI agents → an agent → Connect → **Install plugin**. Mixedlane serves a plugin for each tool with this server's URL baked in, installed by a one-liner:
 
+Choose a project when creating or authorizing a new agent. Project mode grants access to that project and disables project creation. Global mode is an explicit choice with a danger caption: the agent may create multiple projects; access to existing projects still requires grants. Existing agent connections retain their configured grants and show their scope at consent. Legacy API-created agents without a project start with no project grants and cannot create projects until an admin enables it.
+
+**Customize the organization skill:** Settings → AI agents → **Organization agent skill**. Owners, admins and ordinary members can edit the shared Markdown instructions; guests can read them. This does not grant members access to agent identities, API keys or project grants. The default includes separate title/body boilerplates for epics, milestones, user stories, tasks, subtasks and bug reports, basic Markdown examples, and image/video upload-and-verification instructions. Preview a draft, save explicitly, or restore the default. Saves use a version check to prevent overwriting someone else's edits. Each organization has its own stored override. MCP provides `get_agent_skill`, and skills/hooks tell agents to refresh it before each new planning or ticket-writing request, so saved changes apply in ongoing sessions without reinstalling. Reconnect older clients once if that new tool is absent. Organization instructions do not change project permissions.
+
+Install the plugin alongside MCP to get the hooks and four skills; the API-key and browser setup panels link back to this installation. Before creating any ticket, the skills search for similar active work in the same project and epic/milestone, update a match while preserving useful content, or create if none exists. Done/released tickets and tickets in other epics/milestones are excluded. `create_plan` automatically reuses exact title/type matches under the same parent and updates explicitly supplied fields; semantic matches are handled by the agent's search-and-update workflow. Re-run the installer to update existing installations.
+
 ```bash
 curl -fsSL http://<host>/api/plugins/install.sh | sh -s -- claude-code        # or codex | copilot | opencode | pi
 & ([scriptblock]::Create((irm http://<host>/api/plugins/install.ps1))) claude-code   # Windows PowerShell
