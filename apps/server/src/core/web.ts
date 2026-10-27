@@ -14,7 +14,7 @@ function inlineScriptHashes(html: string): string[] {
 
 /**
  * Security headers. When the web app is served from here it gets a strict Content-Security-Policy:
- * scripts only from this origin (plus the hashed inline theme snippet), no plugins, no framing.
+ * scripts from this origin, the hashed theme snippet and Cloudflare analytics; no plugins or framing.
  */
 export function securityHeaders(app: INestApplication, indexHtml?: string) {
   const csp = indexHtml
@@ -22,13 +22,14 @@ export function securityHeaders(app: INestApplication, indexHtml?: string) {
         useDefaults: false,
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", ...inlineScriptHashes(indexHtml)],
+          // Cloudflare may inject its analytics beacon at the proxy.
+          scriptSrc: ["'self'", ...inlineScriptHashes(indexHtml), "https://static.cloudflareinsights.com"],
           // React style props and the editor set inline styles.
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
           imgSrc: ["'self'", "data:", "blob:", "https:"],
           mediaSrc: ["'self'", "blob:"],
-          connectSrc: ["'self'", "ws:", "wss:"],
+          connectSrc: ["'self'", "ws:", "wss:", "https://cloudflareinsights.com"],
           objectSrc: ["'none'"],
           frameAncestors: ["'none'"],
           baseUri: ["'self'"],

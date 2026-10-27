@@ -36,7 +36,8 @@ export function TicketDraftsPage() {
   useEffect(() => { setSearch(""); setStatus(""); setProject(""); setSort("newest"); setPage(0); }, [org?.id]);
   const action = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn(), onSuccess: () => { void qc.invalidateQueries({ queryKey: key }); }, onError: (e: Error) => toast.error(e.message) });
   const selectClass = "h-9 rounded-md border bg-background px-3 text-sm";
-  return <main className="mx-auto w-full max-w-5xl space-y-5 p-6">
+  return <div role="region" aria-label="Ticket drafts" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto">
+    <div className="mx-auto w-full max-w-5xl space-y-5 p-6">
     <Link className="text-sm text-muted-foreground hover:underline" to={`/${org?.slug}/settings/integrations`}>Back to integrations</Link>
     <div className="flex items-center justify-between gap-3"><h1 className="text-xl font-semibold">Ticket drafts</h1><Button variant="outline" size="sm" onClick={() => void drafts.refetch()}><RefreshCw className="size-4" />Refresh</Button></div>
     <p className="text-sm text-muted-foreground">{can("integration.manage") ? "All organization drafts. The sender or an admin can review drafts." : "Your drafts. You can review reports you created."}</p>
@@ -58,5 +59,6 @@ export function TicketDraftsPage() {
           {d.status === "failed" && <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate(() => api.whatsapp.review(d.id, "retry"))}>Retry AI</Button>}
         </article>)}
     <nav className="flex items-center justify-between" aria-label="Draft pages"><Button variant="outline" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</Button><span className="text-sm">Page {currentPage + 1} of {pages}</span><Button variant="outline" disabled={currentPage >= pages - 1} onClick={() => setPage(currentPage + 1)}>Next</Button></nav>
-  </main>;
+    </div>
+  </div>;
 }
