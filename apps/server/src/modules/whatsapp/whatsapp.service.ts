@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { AI_PROVIDERS, type WhatsappSettingsInput, type WhatsappSettingsInfo } from "@mixedlane/shared";
 import { DB, type Db } from "../../core/database/database";
 import { whatsappConnections as connections, whatsappSessions as sessions, whatsappContacts as contacts, whatsappDrafts as drafts, whatsappEvents as events, projects, workItems } from "../../core/database/schema";
@@ -43,10 +43,12 @@ export class WhatsappService {
     const bootstrap = row ? null : whatsappBootstrap();
     const providers: ProviderConfig | null = row ? JSON.parse(decrypt(row.providersEnc)) : bootstrap?.providers ?? null;
     return { configured: !!row, baseUrl: row?.baseUrl ?? bootstrap?.baseUrl ?? "http://192.168.0.6:2785", callbackUrl: row?.callbackUrl ?? config().PUBLIC_URL ?? config().APP_URL,
-      hasApiKey: !!row || !!bootstrap?.apiKey, providers: Object.fromEntries(AI_PROVIDERS.map((p) => [p, { model: providers?.[p]?.model ?? "", configured: !!providers?.[p]?.apiKey }])) as WhatsappSettingsInfo["providers"] };
+      defaultProjectId: row?.defaultProjectId ?? null, askProjectEveryTime: row?.askProjectEveryTime ?? true,
+      hasApiKey: !!row || !!bootstrap?.apiKey, providers: Object.fromEntries(AI_PROVIDERS.map((p) => [p, { model: providers?.[p]?.model ?? "", configured: !!providers?.[p]?.apiKey, ...(p === "custom" ? { url: providers?.[p]?.url ?? "" } : {}) }])) as WhatsappSettingsInfo["providers"] };
   }
   async save(ctx: RequestContext, input: WhatsappSettingsInput) {
     requireOrg(ctx, "integration.manage");
+    if (input.defaultProjectId) await this.access.project(ctx, input.defaultProjectId, "item.create");
     const [old] = await this.db.select().from(connections).where(eq(connections.orgId, ctx.orgId));
     const bootstrap = old ? null : whatsappBootstrap();
     const defaults = bootstrap?.baseUrl === input.baseUrl.replace(/\/$/, "") ? bootstrap : null;
@@ -60,9 +62,10 @@ export class WhatsappService {
       if (linked.length) throw new AppError(409, "Remove connected accounts before changing gateway or callback URL");
     }
     await new OpenWaClient(input.baseUrl, apiKey).call("/sessions");
-    const providers = Object.fromEntries(AI_PROVIDERS.map((p) => [p, { model: input.providers[p].model, apiKey: input.providers[p].apiKey ?? previous?.[p]?.apiKey ?? "" }]));
+    const providers = Object.fromEntries(AI_PROVIDERS.map((p) => [p, { model: input.providers[p].model, apiKey: input.providers[p].apiKey ?? previous?.[p]?.apiKey ?? "", ...(p === "custom" ? { url: input.providers.custom.url ?? previous?.custom?.url ?? "" } : {}) }]));
     for (const p of AI_PROVIDERS) if (providers[p].apiKey && !providers[p].model) throw new AppError(400, `Choose a model for ${p}`);
-    const values = { baseUrl: input.baseUrl.replace(/\/$/, ""), callbackUrl: input.callbackUrl.replace(/\/$/, ""), apiKeyEnc: encrypt(apiKey), providersEnc: encrypt(JSON.stringify(providers)), webhookSecret: old?.webhookSecret ?? randomSecret() };
+    if (providers.custom.apiKey && !providers.custom.url) throw new AppError(400, "Enter a chat completions URL for the custom provider");
+    const values = { defaultProjectId: input.defaultProjectId, askProjectEveryTime: input.askProjectEveryTime, baseUrl: input.baseUrl.replace(/\/$/, ""), callbackUrl: input.callbackUrl.replace(/\/$/, ""), apiKeyEnc: encrypt(apiKey), providersEnc: encrypt(JSON.stringify(providers)), webhookSecret: old?.webhookSecret ?? randomSecret() };
     await this.db.insert(connections).values({ orgId: ctx.orgId, ...values }).onConflictDoUpdate({ target: connections.orgId, set: values });
     return this.settings(ctx.orgId);
   }
@@ -208,7 +211,10 @@ export class WhatsappService {
   async processEvent(id: string) {
     const [event] = await this.db.select().from(events).where(eq(events.id, id));
     if (!event || event.processed) return;
-    await this.handleMessage(event);
+    if (await this.sender(event.orgId, String((event.payload as any).chatId))) {
+      const client = await this.client(event.orgId);
+      await client.whileTyping(event.sessionId, String((event.payload as any).chatId), () => this.handleMessage(event));
+    }
     await this.db.update(events).set({ processed: true }).where(eq(events.id, id));
   }
   private async sender(orgId: string, chatId: string) {
@@ -268,7 +274,13 @@ export class WhatsappService {
     if (!available.length) return;
     const explicit = /^\/?([a-z][a-z0-9]{1,4})\s+([\s\S]+)$/i.exec(text);
     const explicitlyChosen = explicit ? available.find((p) => p.key === explicit[1].toUpperCase()) : null;
-    const chosen = explicitlyChosen ?? (available.length === 1 ? available[0] : null);
+    const conn = await this.connection(ctx.orgId);
+    let remembered: typeof available[number] | undefined;
+    if (!conn.defaultProjectId && !conn.askProjectEveryTime) {
+      const [previous] = await this.db.select({ projectId: drafts.projectId }).from(drafts).where(and(eq(drafts.orgId, ctx.orgId), eq(drafts.sessionId, event.sessionId), eq(drafts.chatId, m.chatId), eq(drafts.userId, ctx.userId!), isNotNull(drafts.projectId))).orderBy(desc(drafts.createdAt)).limit(1);
+      remembered = available.find((p) => p.id === previous?.projectId);
+    }
+    const chosen = explicitlyChosen ?? available.find((p) => p.id === conn.defaultProjectId) ?? remembered ?? (available.length === 1 ? available[0] : null);
     await this.db.insert(drafts).values({ orgId: ctx.orgId, sessionId: event.sessionId, messageId: m.messageId, chatId: m.chatId, userId: ctx.userId!, projectId: chosen?.id, report: explicitlyChosen && explicit ? explicit[2] : text, status: chosen ? "generating" : "select_project" }).onConflictDoNothing();
     const [draft] = await this.db.select().from(drafts).where(and(eq(drafts.sessionId, event.sessionId), eq(drafts.messageId, m.messageId)));
     if (chosen) { await this.jobs.enqueue("whatsapp.triage", { orgId: ctx.orgId, id: draft.id }, { uniqueKey: `wa-triage:${draft.id}` }); return; }
@@ -278,6 +290,12 @@ export class WhatsappService {
   }
 
   async generate(orgId: string, id: string) {
+    const d = await this.draft(orgId, id);
+    if (d.status !== "generating" || !d.projectId) return;
+    const client = await this.client(orgId);
+    return client.whileTyping(d.sessionId, d.chatId, () => this.generateDraft(orgId, id));
+  }
+  private async generateDraft(orgId: string, id: string) {
     const d = await this.draft(orgId, id);
     if (d.status !== "generating" || !d.projectId) return;
     try {

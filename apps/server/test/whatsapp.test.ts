@@ -140,6 +140,80 @@ describe("WhatsApp integration", () => {
     await ingest(message({ body: `project:${d.id}:${project.id}` }));
     expect((await wa.draft(orgId, d.id)).status).toBe("generating");
   });
+  it("routes to a configured project, remembers choices when enabled, and can ask again", async () => {
+    const settings = (await owner.api(org).get("/api/whatsapp/settings")).body;
+    const save = (defaultProjectId: string | null, askProjectEveryTime: boolean) => owner.api(org).put("/api/whatsapp/settings").send({ ...settings, defaultProjectId, askProjectEveryTime });
+    await save(project.id, true).expect(200);
+    expect(await ingest()).toMatchObject({ projectId: project.id, status: "generating" });
+    const web = (await owner.api(org).get("/api/projects")).body.find((p: any) => p.key === "WEB");
+    expect(await ingest(message({ body: "WEB Another report" }))).toMatchObject({ projectId: web.id, report: "Another report" });
+    await owner.api(org).patch(`/api/projects/${project.key}/access`).send({ defaultRole: "viewer" }).expect(200);
+    expect((await ingest()).projectId).not.toBe(project.id);
+    await owner.api(org).patch(`/api/projects/${project.key}/access`).send({ defaultRole: "editor" }).expect(200);
+    await ingest(message({ body: "APP Remember this project" }));
+    await save(null, false).expect(200);
+    expect(await ingest()).toMatchObject({ projectId: project.id, status: "generating" });
+    await save(null, true).expect(200);
+    expect((await ingest()).status).toBe("select_project");
+    const foreign = (await outsider.api(foreignOrg).post("/api/projects").send({ key: "EXT", name: "Foreign" })).body;
+    await save(foreign.id, true).expect(404);
+  });
+  it("sends typing and clears it after successful and failed generation", async () => {
+    for (const mode of ["valid", "all-fail"] as const) {
+      const draft = await ingest(message({ body: "APP Password reset fails" }));
+      mockRemote(mode);
+      await wa.generate(orgId, draft.id);
+      const presence = remoteCalls.filter((c) => c.url.endsWith("/chats/typing"));
+      expect(presence.at(-2)?.body).toEqual({ chatId: `${phone}@c.us`, state: "typing" });
+      expect(presence.at(-1)?.body.state).toBe("paused");
+    }
+  });
+  it("treats unsupported presence as best effort and cleans up on errors", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 501 })));
+    const client = new OpenWaClient("http://gateway.test", "key");
+    await expect(client.whileTyping(sessionId, `${phone}@c.us`, async () => "ok")).resolves.toBe("ok");
+    await expect(client.whileTyping(sessionId, `${phone}@c.us`, async () => { throw new Error("work failed"); })).rejects.toThrow("work failed");
+  });
+  it("refreshes typing during long processing and stops refreshing when finished", async () => {
+    const states: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      states.push(JSON.parse(String(init.body)).state);
+      return Response.json({ ok: true });
+    }));
+    vi.useFakeTimers();
+    try {
+      let finish!: () => void;
+      const running = new OpenWaClient("http://gateway.test", "key").whileTyping(sessionId, `${phone}@c.us`, () => new Promise<void>((resolve) => { finish = resolve; }));
+      await vi.advanceTimersByTimeAsync(16000);
+      finish(); await running;
+      expect(states).toEqual(["typing", "typing", "typing", "paused"]);
+      await vi.advanceTimersByTimeAsync(16000);
+      expect(states).toHaveLength(4);
+    } finally { vi.useRealTimers(); }
+  });
+  it("uses OpenAI and custom chat completions with the configured model and key", async () => {
+    for (const provider of ["openai", "custom"] as const) {
+      const url = provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "http://custom.test/v1/chat/completions";
+      const fetchMock = vi.fn(async () => Response.json({ choices: [{ message: { content: JSON.stringify(proposal) } }] }));
+      vi.stubGlobal("fetch", fetchMock);
+      const result = await triage({ report: "Reset fails", project, items: [] }, { [provider]: { model: "test-model", apiKey: "test-secret", url } });
+      expect(result.provider).toBe(provider);
+      expect(fetchMock.mock.calls[0]).toMatchObject([url, { headers: { authorization: "Bearer test-secret" } }]);
+      expect(JSON.parse(String((fetchMock.mock.calls[0] as any)[1].body)).model).toBe("test-model");
+    }
+  });
+  it("saves custom credentials securely and rejects invalid endpoint URLs", async () => {
+    const settings = (await owner.api(org).get("/api/whatsapp/settings")).body;
+    const input = { ...settings, providers: { ...settings.providers, custom: { model: "custom-model", apiKey: "custom-secret", url: "https://custom.test/v1/chat/completions" }, openai: { model: "openai-model", apiKey: "openai-secret" } } };
+    const res = await owner.api(org).put("/api/whatsapp/settings").send(input).expect(200);
+    expect(res.body.providers.custom).toEqual({ model: "custom-model", configured: true, url: input.providers.custom.url });
+    expect(JSON.stringify(res.body)).not.toContain("custom-secret");
+    const [stored] = await db.select().from(whatsappConnections).where(eq(whatsappConnections.orgId, orgId));
+    expect(stored.providersEnc).not.toContain("custom-secret");
+    for (const url of ["file:///tmp/test", "https://user:pass@custom.test/v1", "https://custom.test/v1?key=secret"]) {
+      await owner.api(org).put("/api/whatsapp/settings").send({ ...input, providers: { ...input.providers, custom: { ...input.providers.custom, url } } }).expect(400);
+    }
+  });
   it("falls back to a quoted text reply for an unsupported interactive engine", async () => {
     const calls: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string) => { calls.push(url); return url.endsWith("send-buttons") ? new Response("", { status: 501 }) : Response.json({ messageId: "ok" }); }));
