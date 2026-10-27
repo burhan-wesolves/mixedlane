@@ -15,6 +15,7 @@ import { ListPage } from "@/pages/ListPage";
 import { ItemPage } from "@/pages/ItemPage";
 import { NewProjectPage } from "@/pages/NewProjectPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { TicketDraftsPage } from "@/pages/TicketDraftsPage";
 import { OrgSettingsPage } from "@/pages/org/OrgSettingsPage";
 import { RequireOrg, RootRedirect } from "@/pages/OrgGate";
 import { OAuthConsentPage } from "@/pages/OAuthConsentPage";
@@ -79,6 +80,7 @@ const router = createBrowserRouter([
               { path: "projects/new", element: <NewProjectPage /> },
               { path: "settings", element: <Navigate to="general" replace /> },
               { path: "settings/:tab", element: <OrgSettingsPage /> },
+              { path: "ticket-drafts", element: <TicketDraftsPage /> },
               { path: "docs", element: <DocsHome /> },
               {
                 path: "docs/:spaceKey",

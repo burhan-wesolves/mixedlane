@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Plus, QrCode, RefreshCw, Trash2 } from "lucide-react";
 import { AI_PROVIDERS, type WhatsappSettingsInput, type WhatsappSettingsInfo } from "@mixedlane/shared";
@@ -56,12 +57,9 @@ export function WhatsappIntegration() {
       <div className="space-y-3 border-t pt-5"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Ticket drafts</h3><Button size="sm" variant="ghost" onClick={() => void drafts.refetch()}><RefreshCw className="size-3.5" /> Refresh</Button></div><p className="text-xs text-muted-foreground">The sender or an admin can approve. AI chooses the ticket type and parent. Send a report directly, or prefix it with a project code, e.g. APP Login fails after reset.</p>
         {drafts.error && <p role="alert" className="text-sm text-destructive">{drafts.error.message}</p>}
         {!drafts.isLoading && !drafts.data?.length && <p className="rounded-lg bg-muted/40 p-4 text-sm text-muted-foreground">No WhatsApp reports yet.</p>}
-        {drafts.data?.map((d) => <article key={d.id} className="space-y-3 rounded-lg border p-4"><div className="flex items-start justify-between gap-3"><h4 className="text-sm font-medium">{d.proposal?.title ?? d.report.slice(0, 140)}</h4><span className="rounded-full bg-muted px-2 py-1 text-xs">{d.status.replaceAll("_", " ")}</span></div><p className="text-xs text-muted-foreground">{d.chatId.split("@")[0]} · {new Date(d.createdAt).toLocaleString()}{d.provider ? ` · ${d.provider}` : ""}</p>
-          {d.proposal && <><p className="text-xs font-medium">{d.proposal.type} · {d.proposal.category} · {d.proposal.priority}{d.proposal.parentId ? ` · Parent: ${d.proposal.parentId}` : ""}</p><p className="whitespace-pre-wrap text-sm">{d.proposal.description}</p><p className="text-xs text-muted-foreground">{d.proposal.reason}</p>{d.proposal.duplicateId && <p className="text-xs text-amber-600">Possible duplicate: {d.proposal.duplicateId}. Ask the sender to revise the report before creating a ticket.</p>}</>}
-          {d.error && <p className="text-sm text-destructive">{d.error}</p>}
-          {d.status === "review" && <div className="flex gap-2"><Button size="sm" disabled={action.isPending || !!d.proposal?.duplicateId} onClick={() => action.mutate(() => api.whatsapp.review(d.id, "approve"))}>Create ticket</Button><Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate(() => api.whatsapp.review(d.id, "cancel"))}>Cancel</Button></div>}
-          {d.status === "failed" && <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate(() => api.whatsapp.review(d.id, "retry"))}>Retry AI</Button>}
-        </article>)}
+        {drafts.isLoading && <p className="text-sm text-muted-foreground">Loading ticket drafts...</p>}
+        {!!drafts.data?.length && <ul className="divide-y rounded-lg border">{drafts.data.slice(0, 5).map((d) => <li key={d.id} className="px-4 py-3 text-sm">{d.proposal?.title ?? d.report.slice(0, 140)}</li>)}</ul>}
+        <Button asChild variant="outline" size="sm"><Link to={`/${org?.slug}/ticket-drafts`}>View all ticket drafts</Link></Button>
       </div>
     </div>
     <Dialog open={!!qrSession} onOpenChange={(open) => { if (!open) setQrSession(null); }}><DialogContent className="sm:max-w-sm"><DialogHeader><DialogTitle>Connect WhatsApp</DialogTitle><DialogDescription>On your phone, open WhatsApp → Linked devices → Link a device.</DialogDescription></DialogHeader>{qr.data?.qrCode?.startsWith("data:image/png;base64,") ? <img src={qr.data.qrCode} alt="WhatsApp connection QR code" className="mx-auto size-64 rounded-lg bg-white p-2" /> : <p className="text-sm text-muted-foreground">{qr.error ? "QR is not ready. Start the account and wait a few seconds; this view refreshes automatically." : "Waiting for QR code…"}</p>}</DialogContent></Dialog>

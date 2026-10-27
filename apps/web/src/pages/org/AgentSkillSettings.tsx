@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgentSkill } from "@mixedlane/shared";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RichText } from "@/components/editor/RichEditor";
@@ -11,6 +12,7 @@ import { useOrg } from "@/lib/auth";
 
 export function AgentSkillSettings() {
   const { org } = useOrg();
+  const [open, setOpen] = useState(false);
   const queryKey = ["agent-skill", org?.id];
   const skill = useQuery({ queryKey, queryFn: api.agents.skill });
   return (
@@ -21,7 +23,16 @@ export function AgentSkillSettings() {
       </div>
       {skill.isLoading && <p className="text-sm text-muted-foreground">Loading skill…</p>}
       {skill.isError && <div role="alert" className="text-sm text-destructive">{skill.error.message} <Button variant="outline" onClick={() => void skill.refetch()}>Retry</Button></div>}
-      {skill.data && <SkillEditor initial={skill.data} queryKey={queryKey} />}
+      {skill.data && <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild><Button size="sm" variant="outline">{skill.data.canEdit ? "Edit skill" : "View skill"}</Button></DialogTrigger>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Organization agent skill</DialogTitle>
+            <DialogDescription>Edit the skill used by all agents in {org?.name}.</DialogDescription>
+          </DialogHeader>
+          <SkillEditor key={org?.id} initial={skill.data} queryKey={queryKey} />
+        </DialogContent>
+      </Dialog>}
     </section>
   );
 }
