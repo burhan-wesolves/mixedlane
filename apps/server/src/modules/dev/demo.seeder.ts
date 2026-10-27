@@ -244,7 +244,7 @@ export class DemoSeeder implements OnApplicationBootstrap {
     // Reuse the previous demo key so MCP clients configured with it keep working after a reset.
     const keyFile = join(SERVER_ROOT, "data", "demo-agent.key");
     const previous = existsSync(keyFile) ? readFileSync(keyFile, "utf8").trim() : undefined;
-    const { agent, key } = await this.agents.create(ctx, { name: "Triage Bot", description: "Labels, prioritizes and routes new work.", docAccess: "read" }, previous);
+    const { agent, key } = await this.agents.create(ctx, { name: "Triage Bot", description: "Labels, prioritizes and routes new work.", docAccess: "read", itemScope: "own", pageScope: "own" }, previous);
     await this.agents.setGrant(ctx, agent.id, { projectId: appProjectId, permissions: [...DEFAULT_AGENT_PERMISSIONS] });
     const bot: Actor = { type: "agent", id: agent.id, name: agent.name };
     const target = this.keys.get("Handle OAuth callback");

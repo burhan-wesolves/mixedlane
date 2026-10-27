@@ -48,7 +48,7 @@ export class ProjectsController {
   /** Only projects the caller can read, each with their effective access. */
   @Get()
   async list(@Ctx() ctx: RequestContext) {
-    const list = await this.projects.list(ctx.orgId);
+    const list = await this.projects.list(ctx.orgId, ctx);
     const access = await this.access.resolveMany(ctx, list as unknown as ProjectRow[]);
     return list.filter((p) => access.get(p.id)).map((p) => ({ ...p, access: access.get(p.id) }));
   }
@@ -96,13 +96,13 @@ export class ProjectsController {
       status: csv(status),
       parentId: parentId === undefined ? undefined : parentId === "root" ? null : parentId,
       q,
-    });
+    }, ctx);
   }
 
   @Get(":id/tree")
   async tree(@Ctx() ctx: RequestContext, @Param("id") id: string) {
     const { project } = await this.access.project(ctx, id, "project.read");
-    return [...(await this.items.summarize(ctx.orgId, project.id)).values()];
+    return [...(await this.items.summarize(ctx.orgId, project.id, ctx)).values()];
   }
 
   /* ---------- Access (who can see/edit this project) ---------- */
@@ -143,6 +143,7 @@ export class ItemsController {
   @Post()
   async create(@Ctx() ctx: RequestContext, @ZBody(itemCreateSchema) body: ItemCreate) {
     const { project } = await this.access.project(ctx, body.projectId, "item.create");
+    if (body.parentId) await this.access.item(ctx, body.parentId, "project.read");
     return toItemDto(await this.items.create(ctx.orgId, { ...body, projectId: project.id }, ctx.actor));
   }
 
@@ -150,13 +151,13 @@ export class ItemsController {
   async byKey(@Ctx() ctx: RequestContext, @Param("key") key: string) {
     const id = await this.items.idByKey(ctx.orgId, key);
     await this.access.item(ctx, id, "project.read");
-    return this.items.detail(ctx.orgId, id);
+    return this.items.detail(ctx.orgId, id, ctx);
   }
 
   @Get(":id")
   async detail(@Ctx() ctx: RequestContext, @Param("id") id: string) {
     await this.access.item(ctx, id, "project.read");
-    return this.items.detail(ctx.orgId, id);
+    return this.items.detail(ctx.orgId, id, ctx);
   }
 
   /** Changing status needs `item.move`; any other field needs `item.update`. */
@@ -166,6 +167,7 @@ export class ItemsController {
     if (fields.includes("status")) await this.access.item(ctx, id, "item.move");
     if (fields.some((f) => f !== "status")) await this.access.item(ctx, id, "item.update");
     if (!fields.length) await this.access.item(ctx, id, "project.read");
+    if (body.parentId) await this.access.item(ctx, body.parentId, "project.read");
     return toItemDto(await this.items.update(ctx.orgId, id, body, ctx.actor));
   }
 
@@ -249,9 +251,9 @@ export class SearchController {
     if (!needle) return { projects: [], items: [] };
     const readable = await this.access.readableProjectIds(ctx);
     const lower = needle.toLowerCase();
-    const projects = (await this.projects.list(ctx.orgId)).filter(
+    const projects = (await this.projects.list(ctx.orgId, ctx)).filter(
       (p) => readable.includes(p.id) && (p.name.toLowerCase().includes(lower) || p.key.toLowerCase().includes(lower)),
     );
-    return { projects, items: await this.items.search(ctx.orgId, needle, readable) };
+    return { projects, items: await this.items.search(ctx.orgId, needle, readable, 20, ctx) };
   }
 }

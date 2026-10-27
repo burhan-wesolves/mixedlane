@@ -223,7 +223,7 @@ export class OAuthService {
       const existing = (await this.agents.list(ctx)).map((a) => a.name.toLowerCase());
       let name = spec.name;
       for (let i = 2; existing.includes(name.toLowerCase()); i++) name = `${spec.name} ${i}`;
-      const { agent } = await this.agents.create(ctx, { name, description: `Connected via OAuth (${client.name})`, docAccess: "read", projectId: spec.projectIds[0], globalMode: spec.globalMode ?? false });
+      const { agent } = await this.agents.create(ctx, { name, description: `Connected via OAuth (${client.name})`, docAccess: "read", itemScope: "own", pageScope: "own", projectId: spec.projectIds[0], globalMode: spec.globalMode ?? false });
       // The key minted at creation isn't needed — this client gets its own key below.
       await this.agents.revokeKey(ctx, agent.id, agent.keys[0].id);
       agentId = agent.id;

@@ -153,7 +153,7 @@ describe("MCP media", () => {
     const media = json(await upload());
     const ticket = json(await tool("prepare_media_upload", { project: "MED", name: "a.png", mime: "image/png", size: png.length }));
     await ctx.http().post("/api/uploads/agent/forged").expect(401);
-    await ctx.http().post(`/api/uploads/agent/${await signFileToken(owner.id)}`).expect(401);
+    await ctx.http().post(`/api/uploads/agent/${await signFileToken(owner.id, owner.id)}`).expect(401);
     const keys = (await owner.api(org).get(`/api/agents/${agentId}`)).body.keys;
     let expired: string;
     try {

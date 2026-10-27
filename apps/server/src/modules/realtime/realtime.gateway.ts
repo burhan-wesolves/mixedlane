@@ -129,6 +129,9 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayDisconnect, OnMo
       socket.disconnect(true);
       return;
     }
+    for (const resource of [...this.presence.keys()]) {
+      if (this.presence.get(resource)?.has(socket.id) && !(await this.canView(ctx, resource))) this.dropPresence(socket, resource);
+    }
     const { orgId, userId } = socket.data;
     const [projectIds, spaceIds] = await Promise.all([this.access.readableProjectIds(ctx), this.docs.readableSpaceIds(ctx)]);
     const want = new Set([rooms.org(orgId), rooms.user(orgId, userId), ...projectIds.map(rooms.project), ...spaceIds.map(rooms.space)]);
@@ -220,11 +223,27 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayDisconnect, OnMo
 
   /* ---------- Domain events → rooms ---------- */
 
-  private send(room: string, event: LiveEvent) {
-    this.server.to(room).emit("live", event);
+  private async send(room: string, event: LiveEvent) {
+    // Project membership alone does not authorize creator-only content.
+    // Revalidate agent settings on every event, including grant revocations.
+    const sockets = await this.server.in(room).fetchSockets();
+    for (const socket of sockets) {
+      if (socket.data.apiKey) {
+        const ctx = await this.agents.authenticate(socket.data.apiKey);
+        if (!ctx) { socket.disconnect(true); continue; }
+        try {
+          if (event.type === "item" || event.type === "comment") await this.access.item(ctx, event.itemId, "project.read");
+          else if (event.type === "page") await this.docs.page(ctx, event.pageId);
+          else if (event.type === "project") await this.access.project(ctx, event.projectId);
+          else if (event.type === "space") await this.docs.space(ctx, event.spaceId);
+        } catch { continue; }
+      }
+      socket.emit("live", event);
+    }
   }
 
   onModuleInit() {
+    this.events.on("agentAccess", ({ orgId }) => this.syncOrg(orgId));
     this.events.on("item", ({ item, action, actor }) =>
       this.send(rooms.project(item.projectId), {
         type: "item",
@@ -244,11 +263,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayDisconnect, OnMo
     this.events.on("project", async ({ orgId, projectId, action, actor }) => {
       // Access may have changed: fix room membership before telling anyone.
       if (action !== "updated" || !(await this.server.in(rooms.project(projectId)).fetchSockets()).length) await this.syncOrg(orgId);
-      this.send(rooms.org(orgId), { type: "project", action, projectId, actor: liveActor(actor) });
+      await this.send(rooms.org(orgId), { type: "project", action, projectId, actor: liveActor(actor) });
     });
     this.events.on("space", async ({ orgId, spaceId, action, actor }) => {
       await this.syncOrg(orgId);
-      this.send(rooms.org(orgId), { type: "space", action, spaceId, actor: liveActor(actor) });
+      await this.send(rooms.org(orgId), { type: "space", action, spaceId, actor: liveActor(actor) });
     });
     this.events.on("page", ({ page, action, actor }) =>
       this.send(rooms.space(page.spaceId), {

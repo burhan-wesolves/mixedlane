@@ -26,7 +26,7 @@ export interface RequestContext {
   orgPermissions: OrgPermission[];
   userId: string | null;
   /** Set when an AI agent calls with an API key (userId is then null). */
-  agent?: { id: string; keyId: string; name: string; docAccess: "none" | "read" | "write"; planningMode: "auto" | "propose"; canCreateProjects: boolean };
+  agent?: { id: string; keyId: string; name: string; docAccess: "none" | "read" | "write"; itemScope?: "own" | "all"; pageScope?: "own" | "all"; planningMode: "auto" | "propose"; canCreateProjects: boolean };
   actor: Actor;
   /** Per-request cache of resolved project access (see AccessService). */
   accessCache?: Map<string, ProjectAccessInfo | null>;

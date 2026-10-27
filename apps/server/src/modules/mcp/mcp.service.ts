@@ -34,6 +34,7 @@ const INSTRUCTIONS = `Mixedlane is a project tracker (projects → epics → mil
 - Descriptions, comments and pages are Markdown in and out.
 - Media: upload_media accepts base64 file bytes up to 1 MB; prepare_media_upload issues a single-file multipart upload URL for larger images/videos without a browser login. Scope uploads to the item's project or the document's space. Embed only the returned markdown in create_item/update_item/add_comment/create_page/update_page. Never paste data: URLs or base64 into descriptions. read_media verifies stored bytes (and returns small images for inspection); saving description text alone is not proof the media uploaded or rendered. If these tools are absent, reconnect to refresh the tool list.
 - You only see projects you were granted, and each tool enforces your permissions (read, create, edit, change status, comment, delete, docs).
+- By default you can access only work items and pages you created. An organization owner or admin can widen either scope in Settings → AI agents → Content access. Project grants and docs permissions still apply.
 - Everything you do is attributed to you and shown to the team live.`;
 
 type Json = Record<string, unknown> | unknown[];
@@ -140,7 +141,7 @@ export class McpService {
 
   private async itemDetail(ctx: RequestContext, ref: string) {
     const { item, project } = await this.item(ctx, ref);
-    const detail = await this.items.detail(ctx.orgId, item.id);
+    const detail = await this.items.detail(ctx.orgId, item.id, ctx);
     const [comments, pages] = await Promise.all([this.comments.list(ctx.orgId, item.id), this.docs.pagesForItem(ctx, item.id)]);
     const statusName = (id: string) => project.statuses.find((s) => s.id === id)?.name ?? id;
     return {
@@ -192,6 +193,8 @@ export class McpService {
             organization: ctx.orgSlug,
             projectCount: readable.length,
             docsAccess: ctx.agent?.docAccess ?? null,
+            itemScope: ctx.agent?.itemScope ?? "own",
+            pageScope: ctx.agent?.pageScope ?? "own",
             planningMode: ctx.agent?.planningMode ?? "auto",
             canCreateProjects: ctx.agent?.canCreateProjects ?? false,
           });
@@ -207,7 +210,7 @@ export class McpService {
       },
       () =>
         run(async () => {
-          const all = (await this.projects.list(ctx.orgId)) as unknown as (ProjectRow & { stats: unknown })[];
+          const all = (await this.projects.list(ctx.orgId, ctx)) as unknown as (ProjectRow & { stats: unknown })[];
           const access = await this.access.resolveMany(ctx, all);
           return ok(
             all
@@ -228,7 +231,7 @@ export class McpService {
       ({ project }) =>
         run(async () => {
           const { project: p, access } = await this.access.project(ctx, project, "project.read");
-          const items = [...(await this.items.summarize(ctx.orgId, p.id)).values()];
+          const items = [...(await this.items.summarize(ctx.orgId, p.id, ctx)).values()];
           const byStatus = Object.fromEntries(p.statuses.map((s) => [s.name, items.filter((i) => i.status === s.id).length]));
           return ok({
             ...this.projectInfo(p, access.permissions),
@@ -293,7 +296,7 @@ export class McpService {
           if (!args.project) {
             if (!args.query) throw new AppError(400, "Give a query, or a project to list its items");
             const readable = await this.access.readableProjectIds(ctx);
-            const hits = await this.items.search(ctx.orgId, args.query, readable, args.limit);
+            const hits = await this.items.search(ctx.orgId, args.query, readable, args.limit, ctx);
             return ok(hits.filter((h) => !args.type || h.type === args.type).map((h) => ({ key: h.key, type: h.type, title: h.title, status: h.status, project: h.projectKey })));
           }
           const { project } = await this.access.project(ctx, args.project, "project.read");
@@ -301,7 +304,7 @@ export class McpService {
             q: args.query,
             type: args.type ? [args.type] : undefined,
             status: args.status ? [this.statusOf(project, args.status).id] : undefined,
-          });
+          }, ctx);
           const who = args.assignee?.trim().toLowerCase();
           const keys = new Map(all.map((i) => [i.id, i.key]));
           const rows = all.filter((i) => !who || i.assignee?.toLowerCase() === who || i.assignee?.toLowerCase().includes(who));
@@ -415,7 +418,7 @@ export class McpService {
         run(async () => {
           const { item, project } = await this.item(ctx, key, "item.move");
           const target = this.statusOf(project, status);
-          const siblings = [...(await this.items.summarize(ctx.orgId, project.id)).values()].filter((i) => i.status === target.id);
+          const siblings = [...(await this.items.summarize(ctx.orgId, project.id, ctx)).values()].filter((i) => i.status === target.id);
           const sortOrder = Math.max(0, ...siblings.map((i) => i.sortOrder)) + 1000;
           await this.items.move(ctx.orgId, item.id, { status: target.id, sortOrder }, ctx.actor);
           return ok({ key: item.key, from: project.statuses.find((s) => s.id === item.status)?.name ?? item.status, to: target.name });
@@ -707,7 +710,7 @@ export class McpService {
       { title: "Project board", description: "A project's items grouped by status column", mimeType: "application/json" },
       async (uri, { project }) => {
         const { project: p } = await this.access.project(ctx, String(project), "project.read");
-        const items = [...(await this.items.summarize(ctx.orgId, p.id)).values()];
+        const items = [...(await this.items.summarize(ctx.orgId, p.id, ctx)).values()];
         const board = p.statuses.map((s) => ({
           status: s.name,
           items: items.filter((i) => i.status === s.id).map((i) => ({ key: i.key, type: TYPE_LABELS[i.type as ItemType], title: i.title, assignee: i.assignee })),

@@ -65,15 +65,16 @@ export async function verifyAccessToken(token: string): Promise<AccessClaims | n
 }
 
 /** Short-lived token in an httpOnly cookie so <img>/<video> can load protected uploads. */
-export async function signFileToken(userId: string): Promise<string> {
-  return new SignJWT({ typ: "file" }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setIssuer("mixedlane").setExpirationTime("1d").sign(jwtKey());
+export async function signFileToken(userId: string, sessionId: string): Promise<string> {
+  return new SignJWT({ typ: "file", sid: sessionId }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setIssuer("mixedlane").setExpirationTime("1d").sign(jwtKey());
 }
 
-export async function verifyFileToken(token: string | undefined): Promise<string | null> {
+export async function verifyFileToken(token: string | undefined): Promise<{ userId: string; sessionId: string } | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, jwtKey(), { issuer: "mixedlane", algorithms: ["HS256"] });
-    return payload.typ === "file" && typeof payload.sub === "string" ? payload.sub : null;
+    return payload.typ === "file" && typeof payload.sub === "string" && typeof payload.sid === "string"
+      ? { userId: payload.sub, sessionId: payload.sid } : null;
   } catch {
     return null;
   }

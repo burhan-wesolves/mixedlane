@@ -133,6 +133,8 @@ export const agents = pgTable("agents", {
   description: text("description").notNull().default(""),
   /** Access to org-wide doc spaces (project spaces follow the agent's project grants). */
   docAccess: text("doc_access").$type<"none" | "read" | "write">().notNull().default("read"),
+  itemScope: text("item_scope").$type<"own" | "all">().notNull().default("own"),
+  pageScope: text("page_scope").$type<"own" | "all">().notNull().default("own"),
   /** When it plans work: create Mixedlane items right away, or propose them and wait for the user. */
   planningMode: text("planning_mode").$type<"auto" | "propose">().notNull().default("auto"),
   /** May create new projects (it then gets full agent access to them). */
@@ -219,6 +221,7 @@ export const workItems = pgTable(
     startDate: text("start_date"),
     dueDate: text("due_date"),
     estimate: real("estimate"),
+    createdByAgentId: uuid("created_by_agent_id"),
     sortOrder: doublePrecision("sort_order").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -227,6 +230,7 @@ export const workItems = pgTable(
     uniqueIndex("work_items_org_key_idx").on(t.orgId, t.key),
     index("work_items_project_idx").on(t.projectId),
     index("work_items_parent_idx").on(t.parentId),
+    index("work_items_agent_creator_idx").on(t.createdByAgentId, t.projectId),
   ],
 );
 
@@ -426,6 +430,7 @@ export const pages = pgTable(
       (): SQL => sql`setweight(to_tsvector('english', coalesce(${pages.title}, '')), 'A') || setweight(to_tsvector('english', coalesce(${pages.contentText}, '')), 'B')`,
     ),
     createdBy: uuid("created_by"),
+    createdByAgentId: uuid("created_by_agent_id"),
     updatedBy: uuid("updated_by"),
     updatedByName: text("updated_by_name").notNull().default(""),
     createdAt: createdAt(),
@@ -433,6 +438,7 @@ export const pages = pgTable(
   },
   (t) => [
     index("pages_space_idx").on(t.spaceId, t.parentId, t.position),
+    index("pages_agent_creator_idx").on(t.createdByAgentId, t.spaceId),
     index("pages_search_idx").using("gin", t.search),
   ],
 );

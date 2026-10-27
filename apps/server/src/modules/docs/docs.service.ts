@@ -56,6 +56,10 @@ export class DocsService {
     private readonly events: EventBus,
   ) {}
 
+  private pageFilter(ctx: RequestContext) {
+    return ctx.agent && ctx.agent.pageScope !== "all" ? eq(pages.createdByAgentId, ctx.agent.id) : undefined;
+  }
+
   /* ---------- Access ---------- */
 
   async permsFor(ctx: RequestContext, list: SpaceRow[]): Promise<Map<string, DocPerms>> {
@@ -93,7 +97,7 @@ export class DocsService {
   async page(ctx: RequestContext, id: string, need: Need = "read") {
     if (!UUID.test(id)) throw notFound("Page");
     const [page] = await this.db.select().from(pages).where(and(eq(pages.orgId, ctx.orgId), eq(pages.id, id)));
-    if (!page) throw notFound("Page");
+    if (!page || (ctx.agent && ctx.agent.pageScope !== "all" && page.createdByAgentId !== ctx.agent.id)) throw notFound("Page");
     try {
       return { page, ...(await this.space(ctx, page.spaceId, need)) };
     } catch (err) {
@@ -111,13 +115,13 @@ export class DocsService {
 
   /* ---------- Spaces ---------- */
 
-  private async toSpaceDto(list: SpaceRow[], perms: Map<string, DocPerms>): Promise<Space[]> {
+  private async toSpaceDto(list: SpaceRow[], perms: Map<string, DocPerms>, ctx: RequestContext): Promise<Space[]> {
     if (!list.length) return [];
     const ids = list.map((s) => s.id);
     const counts = await this.db
       .select({ spaceId: pages.spaceId, n: sql<number>`count(*)::int` })
       .from(pages)
-      .where(inArray(pages.spaceId, ids))
+      .where(and(inArray(pages.spaceId, ids), this.pageFilter(ctx)))
       .groupBy(pages.spaceId);
     const projectIds = list.map((s) => s.projectId).filter((x): x is string => !!x);
     const keys = projectIds.length ? await this.db.select({ id: projects.id, key: projects.key }).from(projects).where(inArray(projects.id, projectIds)) : [];
@@ -143,12 +147,13 @@ export class DocsService {
     return this.toSpaceDto(
       all.filter((s) => perms.get(s.id)?.read),
       perms,
+      ctx,
     );
   }
 
   async getSpace(ctx: RequestContext, keyOrId: string): Promise<Space> {
     const { space, perms } = await this.space(ctx, keyOrId);
-    return (await this.toSpaceDto([space], new Map([[space.id, perms]])))[0];
+    return (await this.toSpaceDto([space], new Map([[space.id, perms]]), ctx))[0];
   }
 
   async createSpace(ctx: RequestContext, input: SpaceCreate): Promise<Space> {
@@ -197,20 +202,22 @@ export class DocsService {
     const rows = await this.db
       .select({ id: pages.id, parentId: pages.parentId, title: pages.title, position: pages.position, updatedAt: pages.updatedAt })
       .from(pages)
-      .where(eq(pages.spaceId, space.id))
+      .where(and(eq(pages.spaceId, space.id), this.pageFilter(ctx)))
       .orderBy(asc(pages.position), asc(pages.createdAt));
-    return rows.map((r) => ({ ...r, updatedAt: iso(r.updatedAt) }));
+    const visible = new Set(rows.map((r) => r.id));
+    return rows.map((r) => ({ ...r, parentId: r.parentId && visible.has(r.parentId) ? r.parentId : null, updatedAt: iso(r.updatedAt) }));
   }
 
-  private async assertParent(spaceId: string, parentId: string) {
+  private async assertParent(ctx: RequestContext, spaceId: string, parentId: string) {
     if (!UUID.test(parentId)) throw notFound("Parent page");
+    await this.page(ctx, parentId);
     const [parent] = await this.db.select({ spaceId: pages.spaceId }).from(pages).where(eq(pages.id, parentId));
     if (!parent || parent.spaceId !== spaceId) throw new AppError(400, "The parent page must be in the same space");
   }
 
   async createPage(ctx: RequestContext, spaceKey: string, input: PageCreate): Promise<PageDetail> {
     const { space } = await this.space(ctx, spaceKey, "write");
-    if (input.parentId) await this.assertParent(space.id, input.parentId);
+    if (input.parentId) await this.assertParent(ctx, space.id, input.parentId);
     const [{ max }] = await this.db
       .select({ max: sql<number>`coalesce(max(${pages.position}), 0)` })
       .from(pages)
@@ -232,6 +239,7 @@ export class DocsService {
           contentHtml,
           contentText,
           createdBy: author.id,
+          createdByAgentId: ctx.agent?.id ?? null,
           updatedBy: author.id,
           updatedByName: author.name,
         })
@@ -249,7 +257,7 @@ export class DocsService {
     const { page, space, perms } = await this.page(ctx, id);
     // Breadcrumbs: walk up the tree (bounded, pages are shallow).
     const crumbs: { id: string; title: string }[] = [];
-    const all = await this.db.select({ id: pages.id, parentId: pages.parentId, title: pages.title }).from(pages).where(eq(pages.spaceId, space.id));
+    const all = await this.db.select({ id: pages.id, parentId: pages.parentId, title: pages.title }).from(pages).where(and(eq(pages.spaceId, space.id), this.pageFilter(ctx)));
     const byId = new Map(all.map((p) => [p.id, p]));
     for (let cur = page.parentId ? byId.get(page.parentId) : undefined; cur && crumbs.length < 50; cur = cur.parentId ? byId.get(cur.parentId) : undefined) {
       crumbs.unshift({ id: cur.id, title: cur.title });
@@ -258,7 +266,7 @@ export class DocsService {
       id: page.id,
       spaceId: space.id,
       spaceKey: space.key,
-      parentId: page.parentId,
+      parentId: page.parentId && byId.has(page.parentId) ? page.parentId : null,
       title: page.title,
       contentHtml: page.contentHtml,
       version: page.version,
@@ -311,7 +319,7 @@ export class DocsService {
     const parentId = input.parentId ?? null;
     if (parentId) {
       if (parentId === id) throw new AppError(400, "A page cannot be its own parent");
-      await this.assertParent(space.id, parentId);
+      await this.assertParent(ctx, space.id, parentId);
       if (await this.isDescendant(parentId, id)) throw new AppError(400, "Cannot move a page under its own sub-page");
     }
     const siblings = await this.db
@@ -343,6 +351,14 @@ export class DocsService {
 
   async deletePage(ctx: RequestContext, id: string) {
     const { page } = await this.page(ctx, id, "write");
+    if (ctx.agent && ctx.agent.pageScope !== "all") {
+      const result = await this.db.execute<{ blocked: boolean }>(sql`
+        WITH RECURSIVE descendants AS (
+          SELECT id, created_by_agent_id FROM pages WHERE id = ${id}
+          UNION SELECT p.id, p.created_by_agent_id FROM pages p JOIN descendants d ON p.parent_id = d.id
+        ) SELECT EXISTS (SELECT 1 FROM descendants WHERE created_by_agent_id IS DISTINCT FROM ${ctx.agent.id}::uuid) AS blocked`);
+      if (result.rows[0]?.blocked) throw new AppError(403, "Cannot delete a tree containing content created by others");
+    }
     // parent_id cascades: sub-pages go too.
     await this.db.delete(pages).where(eq(pages.id, page.id));
     this.events.emit("page", { orgId: ctx.orgId, action: "deleted", page, actor: ctx.actor });
@@ -426,7 +442,7 @@ export class DocsService {
     if (!rows.length) return [];
     const readable = new Set(await this.access.readableProjectIds(ctx));
     return rows
-      .filter((r) => readable.has(r.projectId))
+      .filter((r) => readable.has(r.projectId) && (!ctx.agent || ctx.agent.itemScope === "all" || r.item.createdByAgentId === ctx.agent.id))
       .map((r) => ({ id: r.item.id, key: r.item.key, title: r.item.title, type: r.item.type, status: r.item.status, projectKey: r.projectKey }));
   }
 
@@ -440,7 +456,7 @@ export class DocsService {
       .from(pageItemLinks)
       .innerJoin(pages, eq(pages.id, pageItemLinks.pageId))
       .innerJoin(spaces, eq(spaces.id, pages.spaceId))
-      .where(and(eq(pageItemLinks.itemId, itemId), inArray(pages.spaceId, readable)))
+      .where(and(eq(pageItemLinks.itemId, itemId), inArray(pages.spaceId, readable), this.pageFilter(ctx)))
       .orderBy(asc(pages.title));
   }
 
@@ -460,6 +476,7 @@ export class DocsService {
            websearch_to_tsquery('english', ${needle}) q
       WHERE p.org_id = ${ctx.orgId}
         AND p.space_id IN (${sql.join(readable.map((id) => sql`${id}`), sql`, `)})
+        AND ${ctx.agent && ctx.agent.pageScope !== "all" ? sql`p.created_by_agent_id = ${ctx.agent.id}` : sql`true`}
         AND (p.search @@ q OR p.title ILIKE ${pattern})
       ORDER BY (p.title ILIKE ${pattern}) DESC, ts_rank(p.search, q) DESC, p.updated_at DESC
       LIMIT ${limit}`);
