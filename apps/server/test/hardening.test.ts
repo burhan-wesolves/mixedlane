@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -19,7 +19,7 @@ afterAll(async () => {
 });
 
 describe("single-container web serving", () => {
-  it("serves the SPA for app routes, with a strict CSP that allows only the hashed inline script", async () => {
+  it("serves the SPA for app routes, with a strict CSP that allows the hashed theme script and Cloudflare beacon", async () => {
     const res = await ctx.http().get("/demo/projects/APP/story/APP-0001");
     expect(res.status).toBe(200);
     expect(res.text).toContain('<div id="root">');
@@ -29,6 +29,26 @@ describe("single-container web serving", () => {
     expect(csp).not.toContain("'unsafe-eval'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("object-src 'none'");
+  });
+
+  it("allows Cloudflare analytics in both deployment CSPs without permitting arbitrary scripts", async () => {
+    const res = await ctx.http().get("/demo/ticket-drafts");
+    const nginx = readFileSync(new URL("../../../deploy/nginx/security-headers.conf", import.meta.url), "utf8");
+    const nginxCsp = nginx.match(/add_header Content-Security-Policy "([^"\n]+)" always;/)?.[1];
+    expect(nginxCsp).toBeTruthy();
+    for (const policy of [res.headers["content-security-policy"], nginxCsp]) {
+      const directives = new Map(String(policy).split(";").map((d) => {
+        const [name, ...sources] = d.trim().split(/\s+/);
+        return [name, sources] as const;
+      }));
+      const scripts = directives.get("script-src")!;
+      expect(scripts.filter((s) => !s.startsWith("'sha256-"))).toEqual(["'self'", "https://static.cloudflareinsights.com"]);
+      expect(directives.get("connect-src")).toEqual(["'self'", "ws:", "wss:", "https://cloudflareinsights.com"]);
+      expect(directives.get("object-src")).toEqual(["'none'"]);
+      expect(directives.get("frame-ancestors")).toEqual(["'none'"]);
+      expect(directives.get("base-uri")).toEqual(["'self'"]);
+      expect(directives.get("form-action")).toEqual(["'self'"]);
+    }
   });
 
   it("caches hashed assets forever, and keeps unknown API routes as JSON 404s", async () => {

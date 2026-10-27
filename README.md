@@ -399,7 +399,7 @@ Every change is attributed to the signed-in user (or to GitHub, for automations)
 
 | Service | Image target | What it does |
 | --- | --- | --- |
-| `web` | `Dockerfile --target web` (nginx, non-root) | Serves the built UI and reverse-proxies `/api` (REST, uploads), `/api/socket` (WebSocket), `/api/mcp` (MCP, streamed) and `/.well-known` (OAuth discovery). Strict CSP (`script-src 'self'`), security headers, long-cache hashed assets, `index.html` never cached. |
+| `web` | `Dockerfile --target web` (nginx, non-root) | Serves the built UI and reverse-proxies `/api` (REST, uploads), `/api/socket` (WebSocket), `/api/mcp` (MCP, streamed) and `/.well-known` (OAuth discovery). Strict CSP (app scripts and Cloudflare analytics only), security headers, long-cache hashed assets, `index.html` never cached. |
 | `api` | `Dockerfile --target api` (Node, non-root, tini) | REST API, **MCP server**, realtime socket, job worker, agent plugins. Runs migrations on start. Internal only. |
 | `db` | `postgres:17-alpine` | Data (volume `pgdata`). Internal only. |
 | `minio` *(optional)* | `quay.io/minio/minio` | S3-compatible uploads (`--profile s3`). |
@@ -431,7 +431,7 @@ docker compose --profile s3 up -d --build
 - Files stay private and are streamed through the API, with range support.
 
 **Security**
-- A strict Content-Security-Policy on the web app: scripts come only from the app itself, plus a hashed inline theme snippet.
+- A strict Content-Security-Policy on the web app: scripts come only from the app itself, a hashed inline theme snippet, and `https://static.cloudflareinsights.com` for the proxy-injected analytics beacon. Analytics reports may connect to `https://cloudflareinsights.com`; no wildcard script sources or unsafe script execution are allowed.
 - `frame-ancestors 'none'`, `nosniff`, and the other `helmet` defaults.
 - HSTS and `Secure` cookies are turned on automatically when `APP_URL` is `https://`.
 
