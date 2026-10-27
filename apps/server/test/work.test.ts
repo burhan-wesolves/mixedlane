@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { bootApp, signUp, type TestUser } from "./harness";
+import { PASSWORD, bootApp, signUp, type TestUser } from "./harness";
 
 let ctx: Awaited<ReturnType<typeof bootApp>>;
 let me: TestUser;
@@ -102,6 +102,17 @@ describe("projects & items", () => {
 });
 
 describe("uploads", () => {
+  it("revokes file-cookie access on logout even when the cookie is replayed", async () => {
+    const { user, org } = await signUp(ctx);
+    const login = await user.agent.post("/api/auth/login").send({ email: user.email, password: PASSWORD }).expect(200);
+    const cookies = login.headers["set-cookie"] as unknown as string[];
+    const fileCookie = cookies.find((c) => c.startsWith("ml_file="))!.split(";")[0];
+    const up = await user.api(org).post("/api/uploads").attach("file", Buffer.from("image"), { filename: "a.png", contentType: "image/png" }).expect(201);
+    const download = await ctx.http().get(up.body.url).set("cookie", fileCookie).expect(200);
+    expect(download.headers["cache-control"]).toBe("private, no-store");
+    await user.agent.post("/api/auth/logout").set("authorization", `Bearer ${login.body.accessToken}`).expect(204);
+    await ctx.http().get(up.body.url).set("cookie", fileCookie).expect(404);
+  });
   it("stores allowed files, serves ranges and rejects others", async () => {
     const png = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",

@@ -19,7 +19,7 @@ import {
 import { DB, type Db, type Executor, type Tx } from "../../core/database/database";
 import { comments, ghEntities, ghLinks, orgMembers, projects, users, workItems } from "../../core/database/schema";
 import { AppError, notFound } from "../../core/http";
-import type { Actor } from "../../core/context";
+import type { Actor, RequestContext } from "../../core/context";
 import { EventBus } from "../../core/events";
 import { ActivityService } from "./activity.service";
 import { ProjectsService, categoryOf, isUuid, type ProjectRow } from "./projects.service";
@@ -139,6 +139,7 @@ export class ItemsService {
         .insert(workItems)
         .values({
           orgId,
+          createdByAgentId: actor.type === "agent" ? actor.id : null,
           projectId: project.id,
           parentId: input.parentId ?? null,
           type: input.type,
@@ -245,10 +246,10 @@ export class ItemsService {
   /* ---------- Read models ---------- */
 
   /** Summaries for every item in a project, with leaf-level progress roll-ups and badges. */
-  async summarize(orgId: string, projectId: string): Promise<Map<string, WorkItemSummary>> {
+  async summarize(orgId: string, projectId: string, ctx: RequestContext): Promise<Map<string, WorkItemSummary>> {
     const project = await this.projects.get(orgId, projectId);
     const [all, counts, dev] = await Promise.all([
-      this.db.select().from(workItems).where(eq(workItems.projectId, project.id)).orderBy(asc(workItems.sortOrder)),
+      this.db.select().from(workItems).where(and(eq(workItems.projectId, project.id), ctx?.agent && ctx.agent.itemScope !== "all" ? eq(workItems.createdByAgentId, ctx.agent.id) : undefined)).orderBy(asc(workItems.sortOrder)),
       this.commentCounts(project.id),
       this.devSummaries(project.id),
     ]);
@@ -284,6 +285,7 @@ export class ItemsService {
     for (const it of all) {
       out.set(it.id, {
         ...(toItemDto(it) as unknown as WorkItemSummary),
+        parentId: it.parentId && all.some((p) => p.id === it.parentId) ? it.parentId : null,
         childCount: children.get(it.id)?.length ?? 0,
         progress: progressOf(it),
         commentCount: counts.get(it.id) ?? 0,
@@ -293,8 +295,8 @@ export class ItemsService {
     return out;
   }
 
-  async list(orgId: string, projectId: string, filters: { type?: string[]; parentId?: string | null; status?: string[]; q?: string }) {
-    let items = [...(await this.summarize(orgId, projectId)).values()];
+  async list(orgId: string, projectId: string, filters: { type?: string[]; parentId?: string | null; status?: string[]; q?: string }, ctx: RequestContext) {
+    let items = [...(await this.summarize(orgId, projectId, ctx)).values()];
     if (filters.type?.length) items = items.filter((i) => filters.type!.includes(i.type));
     if (filters.status?.length) items = items.filter((i) => filters.status!.includes(i.status));
     if (filters.parentId !== undefined) items = items.filter((i) => i.parentId === filters.parentId);
@@ -305,10 +307,11 @@ export class ItemsService {
     return items;
   }
 
-  async detail(orgId: string, id: string): Promise<WorkItemDetail> {
+  async detail(orgId: string, id: string, ctx: RequestContext): Promise<WorkItemDetail> {
     const item = await this.get(orgId, id);
-    const summaries = await this.summarize(orgId, item.projectId);
-    const self = summaries.get(id)!;
+    const summaries = await this.summarize(orgId, item.projectId, ctx);
+    const self = summaries.get(id);
+    if (!self) throw notFound("Work item");
     const ancestors: Breadcrumb[] = [];
     let cursor = self.parentId ? summaries.get(self.parentId) : undefined;
     while (cursor) {
@@ -320,14 +323,14 @@ export class ItemsService {
   }
 
   /** Search limited to the given (readable) projects. */
-  async search(orgId: string, q: string, projectIds: string[], limit = 20) {
+  async search(orgId: string, q: string, projectIds: string[], limit: number, ctx: RequestContext) {
     if (!projectIds.length) return [];
     const pattern = `%${q.replace(/[%_\\]/g, "\\$&")}%`;
     const rows = await this.db
       .select({ item: workItems, projectKey: projects.key })
       .from(workItems)
       .innerJoin(projects, eq(projects.id, workItems.projectId))
-      .where(and(eq(workItems.orgId, orgId), inArray(workItems.projectId, projectIds), or(ilike(workItems.title, pattern), ilike(workItems.key, pattern))))
+      .where(and(eq(workItems.orgId, orgId), inArray(workItems.projectId, projectIds), ctx?.agent && ctx.agent.itemScope !== "all" ? eq(workItems.createdByAgentId, ctx.agent.id) : undefined, or(ilike(workItems.title, pattern), ilike(workItems.key, pattern))))
       .limit(limit);
     return rows.map((r) => ({ ...toItemDto(r.item), projectKey: r.projectKey }));
   }

@@ -1,5 +1,5 @@
 import { Global, Inject, Injectable, Module } from "@nestjs/common";
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import {
   AGENT_PERMISSIONS,
   ORG_ROLE_PERMISSIONS,
@@ -166,10 +166,18 @@ export class AccessService {
   async item(ctx: RequestContext, itemId: string, permission: ProjectPermission) {
     if (!UUID.test(itemId)) throw notFound("Work item");
     const [row] = await this.db
-      .select({ projectId: workItems.projectId })
+      .select({ projectId: workItems.projectId, createdByAgentId: workItems.createdByAgentId })
       .from(workItems)
       .where(and(eq(workItems.orgId, ctx.orgId), eq(workItems.id, itemId)));
-    if (!row) throw notFound("Work item");
+    if (!row || (ctx.agent && ctx.agent.itemScope !== "all" && row.createdByAgentId !== ctx.agent.id)) throw notFound("Work item");
+    if (ctx.agent && ctx.agent.itemScope !== "all" && permission === "item.delete") {
+      const result = await this.db.execute<{ blocked: boolean }>(sql`
+        WITH RECURSIVE descendants AS (
+          SELECT id, created_by_agent_id FROM work_items WHERE id = ${itemId}
+          UNION SELECT w.id, w.created_by_agent_id FROM work_items w JOIN descendants d ON w.parent_id = d.id
+        ) SELECT EXISTS (SELECT 1 FROM descendants WHERE created_by_agent_id IS DISTINCT FROM ${ctx.agent.id}::uuid) AS blocked`);
+      if (result.rows[0]?.blocked) throw new AppError(403, "Cannot delete a tree containing content created by others");
+    }
     try {
       return await this.project(ctx, row.projectId, permission);
     } catch (err) {

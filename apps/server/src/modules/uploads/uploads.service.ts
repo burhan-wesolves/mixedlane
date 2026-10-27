@@ -128,6 +128,8 @@ export class UploadsService {
 
   async assertRead(ctx: RequestContext, row: UploadRow) {
     if (ctx.orgId !== row.orgId) throw new AppError(404, "Upload not found");
+    if (ctx.agent && row.uploadedBy !== ctx.agent.id &&
+      (row.spaceId ? ctx.agent.pageScope !== "all" : ctx.agent.itemScope !== "all")) throw new AppError(404, "Upload not found");
     if (row.projectId) await this.access.project(ctx, row.projectId);
     else if (row.spaceId) await this.docs.space(ctx, row.spaceId);
     else if (ctx.agent && row.uploadedBy !== ctx.actor.id) throw new AppError(404, "Upload not found");

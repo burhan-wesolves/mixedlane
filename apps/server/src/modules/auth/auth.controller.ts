@@ -29,7 +29,7 @@ const meta = (req: Request): SessionMeta => ({ userAgent: req.header("user-agent
 async function setSessionCookies(res: Response, s: IssuedSession) {
   const secure = secureCookies();
   res.cookie(REFRESH_COOKIE, s.refreshToken, { httpOnly: true, secure, sameSite: "lax", path: "/api/auth", expires: s.refreshExpiresAt });
-  res.cookie(FILE_COOKIE, await signFileToken(s.userId), { httpOnly: true, secure, sameSite: "lax", path: "/api/uploads", maxAge: 86400_000 });
+  res.cookie(FILE_COOKIE, await signFileToken(s.userId, s.sessionId), { httpOnly: true, secure, sameSite: "lax", path: "/api/uploads", maxAge: 86400_000 });
 }
 
 function clearSessionCookies(res: Response) {

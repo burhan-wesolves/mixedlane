@@ -193,6 +193,7 @@ describe("MCP server", () => {
   });
 
   it("reads and writes docs according to the agent's docs access", async () => {
+    await owner.api(org).patch(`/api/agents/${agentId}`).send({ pageScope: "all" }).expect(200);
     await owner.api(org).post("/api/spaces").send({ name: "Engineering", key: "ENG" }).expect(201);
     const page = (await owner.api(org).post("/api/spaces/ENG/pages").send({ title: "Runbook", contentHtml: "<p>Restart the <strong>worker</strong></p>" })).body;
     const client = await mcpClient();

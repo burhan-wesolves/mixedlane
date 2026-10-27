@@ -51,13 +51,13 @@ export class ProjectsService {
     return project;
   }
 
-  async list(orgId: string) {
+  async list(orgId: string, ctx?: RequestContext) {
     const all = await this.db.select().from(projects).where(eq(projects.orgId, orgId)).orderBy(asc(projects.createdAt));
     if (!all.length) return [];
     const items = await this.db
       .select({ projectId: workItems.projectId, type: workItems.type, status: workItems.status })
       .from(workItems)
-      .where(eq(workItems.orgId, orgId));
+      .where(and(eq(workItems.orgId, orgId), ctx?.agent && ctx.agent.itemScope !== "all" ? eq(workItems.createdByAgentId, ctx.agent.id) : undefined));
     return all.map((p) => {
       // Container goals do not count as work, but top-level tasks and stories do.
       const top = sortTypes(p.itemTypes)[0];

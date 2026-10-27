@@ -43,10 +43,15 @@ export const AGENT_PLANNING_MODE_LABELS: Record<AgentPlanningMode, { label: stri
 export const AGENT_DOC_ACCESS = ["none", "read", "write"] as const;
 export type AgentDocAccess = (typeof AGENT_DOC_ACCESS)[number];
 
+export const AGENT_CONTENT_SCOPES = ["own", "all"] as const;
+export type AgentContentScope = (typeof AGENT_CONTENT_SCOPES)[number];
+
 export const agentCreateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
   description: z.string().trim().max(500).default(""),
   docAccess: z.enum(AGENT_DOC_ACCESS).default("read"),
+  itemScope: z.enum(AGENT_CONTENT_SCOPES).default("own"),
+  pageScope: z.enum(AGENT_CONTENT_SCOPES).default("own"),
   projectId: z.string().uuid().optional(),
   globalMode: z.boolean().optional(),
 });
@@ -54,6 +59,8 @@ export const agentUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   description: z.string().trim().max(500).optional(),
   docAccess: z.enum(AGENT_DOC_ACCESS).optional(),
+  itemScope: z.enum(AGENT_CONTENT_SCOPES).optional(),
+  pageScope: z.enum(AGENT_CONTENT_SCOPES).optional(),
   planningMode: z.enum(AGENT_PLANNING_MODES).optional(),
   canCreateProjects: z.boolean().optional(),
   disabled: z.boolean().optional(),
@@ -111,6 +118,8 @@ export interface Agent {
   name: string;
   description: string;
   docAccess: AgentDocAccess;
+  itemScope: AgentContentScope;
+  pageScope: AgentContentScope;
   planningMode: AgentPlanningMode;
   /** May create new projects (and gets full agent access to the ones it creates). */
   canCreateProjects: boolean;

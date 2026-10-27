@@ -7,6 +7,7 @@ import { Ctx, Public, type RequestContext } from "../../core/context";
 import { AppError } from "../../core/http";
 import { FILE_COOKIE } from "../auth/auth.controller";
 import { verifyFileToken } from "../auth/crypto";
+import { AuthService } from "../auth/auth.service";
 import { AccessService } from "../access/access.service";
 import { AgentsService, isApiKey } from "../agents/agents.service";
 import { DocsModule } from "../docs/docs.controller";
@@ -35,6 +36,7 @@ export class UploadsController {
     private readonly media: UploadsService,
     private readonly access: AccessService,
     private readonly agents: AgentsService,
+    private readonly auth: AuthService,
   ) {}
 
   @Post()
@@ -64,7 +66,8 @@ export class UploadsController {
     const row = await this.media.find(name);
     const authorization = req.header("authorization");
     const bearer = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : null;
-    const userId = bearer ? null : await verifyFileToken(req.cookies?.[FILE_COOKIE]);
+    const fileSession = bearer ? null : await verifyFileToken(req.cookies?.[FILE_COOKIE]);
+    const userId = fileSession && await this.auth.sessionActive(fileSession.sessionId, fileSession.userId) ? fileSession.userId : null;
     const ctx = bearer ? (isApiKey(bearer) ? await this.agents.authenticate(bearer) : null)
       : userId ? await this.access.contextFor(row.orgId, userId) : null;
     if (!ctx) return res.status(404).json({ error: "Not found" });
@@ -76,7 +79,7 @@ export class UploadsController {
     res.set({
       "content-type": row.mime,
       "accept-ranges": "bytes",
-      "cache-control": row.projectId || row.spaceId ? "private, no-cache" : "private, max-age=31536000, immutable",
+      "cache-control": "private, no-store",
       "x-content-type-options": "nosniff",
     });
     // Range requests let browsers seek in videos without downloading the whole file.

@@ -128,6 +128,8 @@ export class AgentsService {
         keyId: row.key.id,
         name: row.agent.name,
         docAccess: row.agent.docAccess,
+        itemScope: row.agent.itemScope,
+        pageScope: row.agent.pageScope,
         planningMode: row.agent.planningMode,
         canCreateProjects: row.agent.canCreateProjects,
       },
@@ -165,6 +167,8 @@ export class AgentsService {
         name: a.name,
         description: a.description,
         docAccess: a.docAccess,
+        itemScope: a.itemScope,
+        pageScope: a.pageScope,
         planningMode: a.planningMode,
         canCreateProjects: a.canCreateProjects,
         disabled: !!a.disabledAt,
@@ -201,7 +205,7 @@ export class AgentsService {
     }
     const [a] = await this.db
       .insert(agents)
-      .values({ orgId: ctx.orgId, name: input.name, description: input.description, docAccess: input.docAccess, createdBy: ctx.userId, canCreateProjects: input.globalMode ?? false })
+      .values({ orgId: ctx.orgId, name: input.name, description: input.description, docAccess: input.docAccess, itemScope: input.itemScope, pageScope: input.pageScope, createdBy: ctx.userId, canCreateProjects: input.globalMode ?? false })
       .returning();
     if (input.projectId) await this.setGrant(ctx, a.id, { projectId: input.projectId, permissions: [...DEFAULT_AGENT_PERMISSIONS] });
     const key = await this.createKey(ctx, a.id, { name: "Default key" }, reuseSecret);
@@ -215,6 +219,7 @@ export class AgentsService {
       .update(agents)
       .set({ ...rest, ...(disabled === undefined ? {} : { disabledAt: disabled ? (a.disabledAt ?? new Date()) : null }) })
       .where(eq(agents.id, id));
+    this.events.emit("agentAccess", { orgId: ctx.orgId });
     return this.get(ctx, id);
   }
 
@@ -226,6 +231,7 @@ export class AgentsService {
       .where(and(eq(projectAccess.principalType, "agent"), eq(projectAccess.principalId, id)))
       .returning({ projectId: projectAccess.projectId });
     await this.db.delete(agents).where(eq(agents.id, id));
+    this.events.emit("agentAccess", { orgId: ctx.orgId });
     for (const g of granted) this.events.emit("project", { orgId: ctx.orgId, projectId: g.projectId, action: "access", actor: ctx.actor });
   }
 
@@ -263,6 +269,7 @@ export class AgentsService {
       .where(and(eq(apiKeys.id, keyId), eq(apiKeys.agentId, agentId), isNull(apiKeys.revokedAt)))
       .returning();
     if (!k) throw notFound("Key");
+    this.events.emit("agentAccess", { orgId: ctx.orgId });
     return toKeyDto(k);
   }
 

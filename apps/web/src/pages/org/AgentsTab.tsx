@@ -507,7 +507,24 @@ function AgentSheet({ agent, onClose, onKey }: { agent: Agent; onClose: () => vo
             </div>
           </section>
 
-          <ProjectAccess agent={agent} />
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold">Content access</h3>
+              <p className="text-xs text-muted-foreground">Limits reads, search, edits and deletes within allowed projects and spaces. Only organization owners and admins can change these settings.</p>
+              {(["itemScope", "pageScope"] as const).map((field) => (
+                <div key={field} className="space-y-1">
+                  <Label>{field === "itemScope" ? "Stories and work items" : "Document pages"}</Label>
+                  <Select value={agent[field]} onValueChange={(v) => update.mutate({ [field]: v })}>
+                    <SelectTrigger className="w-80"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="own">Only created by this agent (recommended)</SelectItem>
+                      <SelectItem value="all">All content in allowed projects / spaces</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </section>
+
+            <ProjectAccess agent={agent} />
 
           <section className="space-y-2">
             <h3 className="text-sm font-semibold">Docs</h3>

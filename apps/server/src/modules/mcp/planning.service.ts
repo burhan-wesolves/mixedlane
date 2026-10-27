@@ -86,7 +86,7 @@ export class PlanningService {
     if (!input.items.length) throw new AppError(400, "The plan has no items");
     if (input.items.length > MAX_ITEMS) throw new AppError(400, `A plan can have at most ${MAX_ITEMS} items — split it up`);
     const { project, access } = await this.access.project(ctx, input.project, "project.read");
-    const all = [...(await this.items.summarize(ctx.orgId, project.id)).values()];
+    const all = [...(await this.items.summarize(ctx.orgId, project.id, ctx)).values()];
     const enabled = project.itemTypes;
 
     const refs = new Map<string, PlanItem>();
@@ -253,7 +253,7 @@ export class PlanningService {
     const alreadyDone = categoryOf(project.statuses, item.status) === "done";
     if (item.status !== status.id && !(stage === "start" && alreadyDone)) {
       if (!this.can(access, "item.move")) throw new AppError(403, "You don't have permission to change status in this project");
-      const siblings = [...(await this.items.summarize(ctx.orgId, project.id)).values()].filter((i) => i.status === status.id);
+      const siblings = [...(await this.items.summarize(ctx.orgId, project.id, ctx)).values()].filter((i) => i.status === status.id);
       await this.items.move(ctx.orgId, item.id, { status: status.id, sortOrder: Math.max(0, ...siblings.map((i) => i.sortOrder)) + 1000 }, ctx.actor);
       moved = true;
     }

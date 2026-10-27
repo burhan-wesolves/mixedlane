@@ -18,6 +18,7 @@ export interface SessionMeta {
 
 /** Everything the controller needs to answer and set cookies. */
 export interface IssuedSession {
+  sessionId: string;
   response: AuthResponse;
   refreshToken: string;
   refreshExpiresAt: Date;
@@ -70,6 +71,7 @@ export class AuthService {
     const accessToken = await signAccessToken({ sub: user.id, sid: session.id });
     return {
       refreshToken,
+      sessionId: session.id,
       refreshExpiresAt,
       userId: user.id,
       response: {
