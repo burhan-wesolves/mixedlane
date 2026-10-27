@@ -2,7 +2,7 @@ import { RunnableLambda } from "@langchain/core/runnables";
 import { AI_PROVIDERS, ticketDraftSchema, canHaveParent, type TicketDraft } from "@mixedlane/shared";
 import type { projects, workItems } from "../../core/database/schema";
 
-export type ProviderConfig = Record<typeof AI_PROVIDERS[number], { model: string; apiKey: string }>;
+export type ProviderConfig = Partial<Record<typeof AI_PROVIDERS[number], { model: string; apiKey: string; url?: string }>>;
 export interface TriageInput {
   report: string;
   project: typeof projects.$inferSelect;
@@ -26,7 +26,7 @@ Use task for a standalone actionable issue; use subtask only under an existing s
 Check existing items for duplicates. Return ONLY JSON with keys: type, title, description (Markdown with summary and acceptance criteria), priority (low|medium|high|urgent), category (bug|feature|issue), parentId (UUID or null), duplicateId (UUID or null), reason (brief explanation).`;
   const prompt = JSON.stringify({ project: { name: input.project.name, enabledTypes: input.project.itemTypes }, existingItems: input.items, report: input.report });
   const attempts = AI_PROVIDERS.filter((p) => providers[p]?.apiKey).map((provider) => RunnableLambda.from(async () => {
-    const { model, apiKey } = providers[provider];
+    const { model, apiKey, url: customUrl } = providers[provider]!;
     let url: string;
     let headers: Record<string, string>;
     let body: unknown;
@@ -39,11 +39,11 @@ Check existing items for duplicates. Return ONLY JSON with keys: type, title, de
       headers = { "x-goog-api-key": apiKey };
       body = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } };
     } else {
-      url = "https://api.x.ai/v1/chat/completions";
+      url = provider === "custom" ? customUrl! : provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "https://api.x.ai/v1/chat/completions";
       headers = { authorization: `Bearer ${apiKey}` };
       body = { model, response_format: { type: "json_object" }, messages: [{ role: "system", content: system }, { role: "user", content: prompt }] };
     }
-    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(40000) });
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(40000), redirect: "error" });
     if (!res.ok) throw new Error(`${provider} unavailable (${res.status})`);
     const data = await res.json() as any;
     const content = provider === "ollama" ? data.message?.content : provider === "gemini" ? data.candidates?.[0]?.content?.parts?.filter((p: any) => !p.thought).map((p: any) => p.text ?? "").join("") : data.choices?.[0]?.message?.content;

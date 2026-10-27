@@ -2,10 +2,20 @@ import { AppError } from "../../core/http";
 
 export class OpenWaClient {
   constructor(private baseUrl: string, private key: string) {}
-  async call<T = any>(path: string, method = "GET", body?: unknown, idempotencyKey?: string): Promise<T> {
+  async whileTyping<T>(session: string, chatId: string, work: () => Promise<T>): Promise<T> {
+    let pending: Promise<void> | undefined;
+    const presence = (state: "typing" | "paused") => this.call(`/sessions/${session}/chats/typing`, "POST", { chatId, state }, undefined, 3000).then(() => {}, () => {});
+    // Presence is best effort: an unsupported or offline gateway must not block reports.
+    const refresh = () => { if (!pending) pending = presence("typing").finally(() => { pending = undefined; }); };
+    refresh();
+    const timer = setInterval(refresh, 8000);
+    try { return await work(); }
+    finally { clearInterval(timer); await pending; await presence("paused"); }
+  }
+  async call<T = any>(path: string, method = "GET", body?: unknown, idempotencyKey?: string, timeoutMs = 35000): Promise<T> {
     const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api${path}`, {
       method, headers: { "content-type": "application/json", "X-API-Key": this.key, ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(35000), redirect: "error",
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(timeoutMs), redirect: "error",
     });
     if (!res.ok) throw new AppError(res.status === 501 ? 501 : 502, `OpenWA request failed (${res.status}). Check gateway connectivity, permissions, and session status.`);
     if (res.status === 204) return undefined as T;
