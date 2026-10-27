@@ -143,7 +143,7 @@ export class WhatsappService {
   }
   async listDrafts(ctx: RequestContext) {
     const manage = ctx.orgPermissions.includes("integration.manage");
-    const rows = await this.db.select().from(drafts).where(manage ? eq(drafts.orgId, ctx.orgId) : and(eq(drafts.orgId, ctx.orgId), eq(drafts.userId, ctx.userId!))).orderBy(desc(drafts.createdAt)).limit(100);
+    const rows = await this.db.select().from(drafts).where(manage ? eq(drafts.orgId, ctx.orgId) : and(eq(drafts.orgId, ctx.orgId), eq(drafts.userId, ctx.userId!))).orderBy(desc(drafts.createdAt), desc(drafts.id));
     const visible: Draft[] = [];
     for (const d of rows) if (!d.projectId || await this.access.canRead(ctx, d.projectId)) visible.push(d);
     return visible;

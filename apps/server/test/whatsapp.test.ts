@@ -68,6 +68,32 @@ describe("WhatsApp integration", () => {
     await owner.api(org).get(`/api/whatsapp/sessions/${sessionId}/qr`).expect(200);
     expect(remoteCalls.some((c) => c.url.endsWith("/webhooks") && c.body?.events?.includes("message.received"))).toBe(true);
   });
+  it("lists all drafts beyond 100 for admins, only own drafts for members, and isolates organizations", async () => {
+    const admin = await invite(app, owner, org, "wa-admin@test.dev", "admin");
+    const other = await invite(app, owner, org, "wa-other@test.dev", "member");
+    const rows = Array.from({ length: 105 }, (_, i) => ({
+      id: randomUUID(), orgId, sessionId, messageId: randomUUID(), chatId: `${phone}@c.us`,
+      userId: i % 2 ? other.id : member.id, report: `Draft ${i}`, projectId: project.id,
+      createdAt: new Date(2020, 0, 1, 0, i),
+    }));
+    await db.insert(whatsappDrafts).values(rows);
+    try {
+      const all = (await admin.api(org).get("/api/whatsapp/drafts").expect(200)).body;
+      const ids = new Set(rows.map((r) => r.id));
+      expect(all.filter((d: any) => ids.has(d.id))).toHaveLength(105);
+      expect(all.filter((d: any) => ids.has(d.id)).map((d: any) => d.id)).toEqual([...rows].reverse().map((r) => r.id));
+      for (const user of [member, other]) {
+        const own = (await user.api(org).get("/api/whatsapp/drafts").expect(200)).body;
+        expect(own.every((d: any) => d.userId === user.id)).toBe(true);
+        expect(own.filter((d: any) => ids.has(d.id))).toHaveLength(rows.filter((r) => r.userId === user.id).length);
+      }
+      const foreign = (await outsider.api(foreignOrg).get("/api/whatsapp/drafts").expect(200)).body;
+      expect(foreign.some((d: any) => ids.has(d.id))).toBe(false);
+      await other.api(org).post(`/api/whatsapp/drafts/${rows[0].id}/review`).send({ action: "cancel" }).expect(403);
+    } finally {
+      for (const row of rows) await db.delete(whatsappDrafts).where(eq(whatsappDrafts.id, row.id));
+    }
+  });
   it("encrypts all API keys and never returns credentials or signing secrets", async () => {
     const [stored] = await db.select().from(whatsappConnections).where(eq(whatsappConnections.orgId, orgId));
     expect(stored.apiKeyEnc).not.toContain("test-gateway-key");
