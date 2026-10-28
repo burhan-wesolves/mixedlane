@@ -129,7 +129,7 @@ export function ProjectAccessSettings({ project }: { project: Project }) {
       <section className="space-y-3">
         <h2 className="font-semibold">People and teams</h2>
         <p className="text-sm text-muted-foreground">
-          Grants add to the default — someone gets the highest role that applies to them. Org owners and admins always have admin access.
+          An individual role overrides team and organization defaults. Without an individual role, the highest inherited role applies. Revocations block access; org owners and admins always have admin access.
         </p>
         <div className="divide-y overflow-hidden rounded-xl border bg-card">
           {data.grants.map((g) => (

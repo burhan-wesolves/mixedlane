@@ -71,7 +71,7 @@ describe("project roles", () => {
     expect((await m.post(`/api/projects/${open.id}/access`).send({ principalType: "user", principalId: guest.id, role: "admin" })).status).toBe(403);
   });
 
-  it("commenters can comment but not edit; viewers can only read", async () => {
+  it("commenters and viewers can comment but cannot edit work", async () => {
     const t = teamMember.api(org);
     expect((await t.post(`/api/items/${secretItem}/comments`).send({ body: "<p>hi</p>" })).status).toBe(201);
     expect((await t.patch(`/api/items/${secretItem}`).send({ title: "x" })).status).toBe(403);
@@ -81,7 +81,7 @@ describe("project roles", () => {
     await owner.api(org).post(`/api/projects/${open.id}/access`).send({ principalType: "user", principalId: guest.id, role: "viewer" }).expect(200);
     const g = guest.api(org);
     expect((await g.get(`/api/items/${openItem}`)).status).toBe(200);
-    expect((await g.post(`/api/items/${openItem}/comments`).send({ body: "<p>no</p>" })).status).toBe(403);
+    expect((await g.post(`/api/items/${openItem}/comments`).send({ body: "<p>Viewer finding</p>" })).status).toBe(201);
     expect((await g.delete(`/api/items/${openItem}`)).status).toBe(403);
   });
 

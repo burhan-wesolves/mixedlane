@@ -8,6 +8,10 @@ export function Description({ value, onSave, readOnly }: { value: string; onSave
   const [draft, setDraft] = useState(value);
   const editRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (readOnly) setEditing(false);
+  }, [readOnly]);
+
   // The editor fills the screen while editing — bring all of it into view.
   useEffect(() => {
     if (editing) editRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -18,11 +22,12 @@ export function Description({ value, onSave, readOnly }: { value: string; onSave
     setEditing(true);
   };
   const save = async () => {
+    if (readOnly) return;
     await onSave(draft);
     setEditing(false);
   };
 
-  if (editing) {
+  if (editing && !readOnly) {
     return (
       <div ref={editRef} className="scroll-mt-4 space-y-2">
         <RichEditor

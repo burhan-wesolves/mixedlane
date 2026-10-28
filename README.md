@@ -84,7 +84,7 @@ The demo also has an AI agent, **Triage Bot**, with access to APP. Its API key i
   Invite by email or a shareable link. The invite can pre-assign teams, and accepting creates the account.
 - **Project access.**
   - Each project is either **Organization** (visible to members at a default role) or **Private**.
-  - You can grant roles (Admin, Editor, Commenter, Viewer) to people or whole teams. Someone gets the highest role that applies to them.
+  - You can grant roles (Admin, Editor, Commenter, Viewer) to people or whole teams. An individual role overrides inherited team/default roles; without one, the highest inherited role applies. Explicit revocations block access. Viewers can comment on findings but cannot edit tickets. Org owners and admins retain admin access.
   - The UI hides what you can't do, and the server enforces it on every endpoint.
   - Projects you can't see return 404, and every query is scoped to your organization.
 - **Uploads:**

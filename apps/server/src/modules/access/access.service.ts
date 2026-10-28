@@ -36,8 +36,8 @@ export function requireOrg(ctx: RequestContext, permission: OrgPermission) {
 /**
  * Resolves what the caller may do in a project:
  *   - org owner/admin → project admin everywhere
- *   - otherwise the highest of: direct grant, grants to any of their teams, and — for members on
- *     org-visible projects — the project's default role. Guests only get explicit grants.
+ *   - a revocation blocks access; otherwise an individual role overrides inherited roles.
+ *   - without an individual role, the highest team/default role applies. Guests need grants.
  * No access at all is reported as 404 so private projects can't be discovered.
  */
 @Injectable()
@@ -111,7 +111,7 @@ export class AccessService {
         elevated || !principals.length
           ? []
           : await this.db
-              .select({ projectId: projectAccess.projectId, role: projectAccess.role, permissions: projectAccess.permissions })
+              .select({ projectId: projectAccess.projectId, principalType: projectAccess.principalType, principalId: projectAccess.principalId, role: projectAccess.role, permissions: projectAccess.permissions })
               .from(projectAccess)
               .where(and(inArray(projectAccess.projectId, todo.map((p) => p.id)), or(...principals)));
 
@@ -129,8 +129,12 @@ export class AccessService {
           if (!role || PROJECT_ROLE_RANK[r] > PROJECT_ROLE_RANK[role]) role = r;
         };
         if (!elevated) {
-          if (ctx.orgRole === "member" && !membership?.restricted && p.visibility === "org") consider(p.defaultRole);
-          for (const g of grants) if (g.projectId === p.id) consider(g.role);
+          const individual = grants.find((g) => g.projectId === p.id && g.principalType === "user" && g.principalId === ctx.userId);
+          if (individual) role = individual.role;
+          else {
+            if (ctx.orgRole === "member" && !membership?.restricted && p.visibility === "org") consider(p.defaultRole);
+            for (const g of grants) if (g.projectId === p.id && g.principalType === "team") consider(g.role);
+          }
         }
         cache.set(p.id, role ? { role, permissions: PROJECT_ROLE_PERMISSIONS[role] } : null);
       }
@@ -229,11 +233,12 @@ export class AccessService {
           sources.push(source);
           if (!role || PROJECT_ROLE_RANK[r] > PROJECT_ROLE_RANK[role]) role = r;
         };
+        const individual = grants.find((g) => g.principalType === "user" && g.principalId === m.userId);
         if (elevated) consider("admin", "Organization admin");
+        else if (individual) consider(individual.role, "Individual role override");
         else {
           if (m.orgRole === "member" && !m.restricted && project.visibility === "org") consider(project.defaultRole, "Organization default");
           for (const g of grants) {
-            if (g.principalType === "user" && g.principalId === m.userId) consider(g.role, "Individual grant");
             if (g.principalType === "team") {
               const team = memberships.find((t) => t.userId === m.userId && t.teamId === g.principalId);
               if (team) consider(g.role, `Team: ${team.name}`);
