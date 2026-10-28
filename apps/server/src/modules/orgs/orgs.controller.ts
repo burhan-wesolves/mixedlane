@@ -9,6 +9,7 @@ import {
   teamMemberSchema,
   teamUpdateSchema,
   type OrgRole,
+  type ProjectRole,
 } from "@mixedlane/shared";
 import { Auth, Ctx, NoOrg, type AuthInfo, type RequestContext } from "../../core/context";
 import { ZBody } from "../../core/zod-body";
@@ -94,7 +95,7 @@ export class CurrentOrgController {
   }
 
   @Post("teams")
-  createTeam(@Ctx() ctx: RequestContext, @ZBody(teamCreateSchema) body: { name: string; description?: string }) {
+  createTeam(@Ctx() ctx: RequestContext, @ZBody(teamCreateSchema) body: { name: string; description?: string; projectGrants: { projectId: string; role: ProjectRole }[] }) {
     requireOrg(ctx, "team.manage");
     return this.orgs.createTeam(ctx.orgId, body);
   }

@@ -50,6 +50,38 @@ it("rejects invitations selecting another organization's project", async () => {
   await owner.api(org).post("/api/org/invites").send({ email: "bad@tests.dev", projectIds: [foreign.id] }).expect(400);
 });
 
+it("creates team project grants atomically and applies them to members added later", async () => {
+  const { user: owner, org } = await signUp(ctx);
+  const o = owner.api(org);
+  const project = (await o.post("/api/projects").send({ key: "TEAM", name: "Team project", itemTypes: ["task"] })).body;
+  const team = (await o.post("/api/org/teams").send({ name: "Design", projectGrants: [{ projectId: project.id, role: "viewer" }] }).expect(201)).body;
+  const member = await invite(ctx, owner, org, "new-team-member@tests.dev", "member", [], []);
+  await member.api(org).get(`/api/projects/${project.id}`).expect(404);
+  await o.post(`/api/org/teams/${team.id}/members`).send({ userId: member.id }).expect(204);
+  const visible = await member.api(org).get(`/api/projects/${project.id}`).expect(200);
+  expect(visible.body.access.role).toBe("viewer");
+  await member.api(org).post("/api/items").send({ projectId: project.id, type: "task", title: "Forbidden" }).expect(403);
+  const overview = (await o.get(`/api/projects/${project.id}/access`).expect(200)).body;
+  const grant = overview.grants.find((g: { principalId: string }) => g.principalId === team.id);
+  expect(overview.members.find((m: { userId: string }) => m.userId === member.id).sources).toContain("Team: Design");
+  await o.delete(`/api/projects/${project.id}/access/${grant.id}`).expect(200);
+  await member.api(org).get(`/api/projects/${project.id}`).expect(404);
+  await member.api(org).post("/api/org/teams").send({ name: "Escalate", projectGrants: [{ projectId: project.id, role: "admin" }] }).expect(403);
+});
+
+it("rejects invalid and cross-organization team creation grants without leaving a team behind", async () => {
+  const { user: owner, org } = await signUp(ctx);
+  const { user: other, org: otherOrg } = await signUp(ctx);
+  const foreign = (await other.api(otherOrg).post("/api/projects").send({ key: "XORG", name: "Foreign", itemTypes: ["task"] })).body;
+  const o = owner.api(org);
+  await o.post("/api/org/teams").send({ name: "Invalid", projectGrants: [{ projectId: foreign.id, role: "editor" }] }).expect(400);
+  expect((await o.get("/api/org/teams")).body).toEqual([]);
+  const own = (await o.post("/api/projects").send({ key: "LOCAL", name: "Local", itemTypes: ["task"] })).body;
+  await o.post("/api/org/teams").send({ name: "Duplicate", projectGrants: [{ projectId: own.id, role: "viewer" }, { projectId: own.id, role: "admin" }] }).expect(400);
+  await o.post("/api/org/teams").send({ name: "Bad role", projectGrants: [{ projectId: own.id, role: "owner" }] }).expect(400);
+  expect((await o.get("/api/org/teams")).body).toEqual([]);
+});
+
 it("refreshes live subscriptions after team removal and explicit revocation", async () => {
   const { user: owner, org } = await signUp(ctx);
   const o = owner.api(org);

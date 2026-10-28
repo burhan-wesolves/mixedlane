@@ -133,7 +133,7 @@ export const api = {
     setRole: (userId: string, role: OrgRole) => request<void>(`/org/members/${userId}`, json("PATCH", { role })),
     removeMember: (userId: string) => request<void>(`/org/members/${userId}`, { method: "DELETE" }),
     teams: () => request<Team[]>("/org/teams"),
-    createTeam: (name: string, description = "") => request<Team>("/org/teams", json("POST", { name, description })),
+    createTeam: (name: string, description = "", projectGrants: { projectId: string; role: ProjectRole }[] = []) => request<Team>("/org/teams", json("POST", { name, description, projectGrants })),
     updateTeam: (id: string, patch: { name?: string; description?: string }) => request<Team>(`/org/teams/${id}`, json("PATCH", patch)),
     deleteTeam: (id: string) => request<void>(`/org/teams/${id}`, { method: "DELETE" }),
     addTeamMember: (teamId: string, userId: string, role: "lead" | "member" = "member") =>

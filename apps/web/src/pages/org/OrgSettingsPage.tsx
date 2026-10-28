@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Bot, Building2, Check, Copy, Link2, LogOut, Mail, Plug, Plus, Trash2, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
-import { ORG_ROLES, ORG_ROLE_HINTS, ORG_ROLE_LABELS, type OrgRole, type Team } from "@mixedlane/shared";
+import { ORG_ROLES, ORG_ROLE_HINTS, ORG_ROLE_LABELS, type Member, type OrgRole, type Team } from "@mixedlane/shared";
+import { PrincipalProjectAccess, TeamProjectGrants, type AccessPrincipal, type TeamProjectGrant } from "./PrincipalProjectAccess";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -218,6 +219,7 @@ function MembersTab() {
   const { org, can } = useOrg();
   const { user } = useAuth();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [accessMember, setAccessMember] = useState<Member | null>(null);
   const { data: members, isLoading } = useQuery({ queryKey: ["org", "members"], queryFn: api.orgs.members });
   const { data: invites = [] } = useQuery({ queryKey: ["org", "invites"], queryFn: api.orgs.invites, enabled: can("org.invite") });
   const invalidate = () => qc.invalidateQueries({ queryKey: ["org"] });
@@ -264,6 +266,7 @@ function MembersTab() {
                 allowOwner={isOwner}
                 onChange={(role) => setRole.mutate({ userId: m.userId, role })}
               />
+              {canManage && <Button size="sm" variant="outline" aria-label={`Project access for ${m.name}`} onClick={() => setAccessMember(m)}>Project access</Button>}
               {canManage && m.userId !== user?.id && (
                 <Button
                   size="icon"
@@ -302,6 +305,7 @@ function MembersTab() {
       )}
 
       {inviteOpen && <InviteDialog onClose={() => setInviteOpen(false)} />}
+      {accessMember && <PrincipalProjectAccess principal={{ type: "user", id: accessMember.userId, name: accessMember.name, elevated: accessMember.role === "owner" || accessMember.role === "admin" }} onClose={() => setAccessMember(null)} />}
     </div>
   );
 }
@@ -370,7 +374,7 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
               <Input id="invite-email" type="email" autoFocus required value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="grid gap-1.5">
-              <Label>Role</Label>
+              <Label>Organization role</Label>
               <RoleSelect value={role} onChange={setRole} />
             </div>
             <fieldset className="grid gap-2">
@@ -472,8 +476,9 @@ function TeamsTab() {
 function NewTeamDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [projectGrants, setProjectGrants] = useState<TeamProjectGrant[]>([]);
   const create = useMutation({
-    mutationFn: () => api.orgs.createTeam(name.trim(), description.trim()),
+    mutationFn: () => api.orgs.createTeam(name.trim(), description.trim(), projectGrants),
     onSuccess: () => {
       onCreated();
       toast.success(`Team ${name.trim()} created`);
@@ -483,10 +488,10 @@ function NewTeamDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   });
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>New team</DialogTitle>
-          <DialogDescription>Add people afterwards, then grant the team access to projects.</DialogDescription>
+          <DialogDescription>Choose the team's projects and roles now. Members added afterwards inherit these grants.</DialogDescription>
         </DialogHeader>
         <form
           className="grid gap-4"
@@ -503,6 +508,7 @@ function NewTeamDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
             <Label htmlFor="team-desc">Description (optional)</Label>
             <Textarea id="team-desc" rows={3} placeholder="What does this team work on?" value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
+          <TeamProjectGrants value={projectGrants} onChange={setProjectGrants} disabled={create.isPending} />
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
@@ -517,8 +523,9 @@ function NewTeamDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   );
 }
 
-function TeamCard({ team, members, manage, onChange }: { team: Team; members: { userId: string; name: string; email: string }[]; manage: boolean; onChange: () => void }) {
+function TeamCard({ team, members, manage, onChange }: { team: Team; members: Member[]; manage: boolean; onChange: () => void }) {
   const [adding, setAdding] = useState("");
+  const [accessPrincipal, setAccessPrincipal] = useState<AccessPrincipal | null>(null);
   const add = useMutation({ mutationFn: (userId: string) => api.orgs.addTeamMember(team.id, userId), onSuccess: onChange, onError });
   const remove = useMutation({ mutationFn: (userId: string) => api.orgs.removeTeamMember(team.id, userId), onSuccess: onChange, onError });
   const del = useMutation({ mutationFn: () => api.orgs.deleteTeam(team.id), onSuccess: onChange, onError });
@@ -543,12 +550,17 @@ function TeamCard({ team, members, manage, onChange }: { team: Team; members: { 
           </Button>
         )}
       </div>
+      {manage && <div className="border-b p-3"><Button size="sm" variant="outline" onClick={() => setAccessPrincipal({ type: "team", id: team.id, name: team.name })} aria-label={`Project access for team ${team.name}`}>Project access</Button></div>}
       <ul className="divide-y">
         {team.members.map((m) => (
           <li key={m.userId} className="flex items-center gap-2 px-4 py-2 text-sm">
             <UserAvatar name={m.name} />
             <span className="min-w-0 flex-1 truncate">{m.name}</span>
             {m.role === "lead" && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Lead</span>}
+            {manage && <Button size="sm" variant="ghost" aria-label={`Project access for ${m.name}`} onClick={() => {
+              const member = members.find((person) => person.userId === m.userId);
+              setAccessPrincipal({ type: "user", id: m.userId, name: m.name, elevated: member?.role === "owner" || member?.role === "admin" });
+            }}>Access</Button>}
             {manage && (
               <button className="text-muted-foreground hover:text-destructive" aria-label={`Remove ${m.name}`} onClick={() => remove.mutate(m.userId)}>
                 <X className="size-4" />
@@ -580,6 +592,7 @@ function TeamCard({ team, members, manage, onChange }: { team: Team; members: { 
           </Select>
         </div>
       )}
+      {accessPrincipal && <PrincipalProjectAccess principal={accessPrincipal} onClose={() => setAccessPrincipal(null)} />}
     </div>
   );
 }

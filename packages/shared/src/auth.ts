@@ -130,8 +130,9 @@ export const memberUpdateSchema = z.object({ role: z.enum(ORG_ROLES) });
 export const teamCreateSchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().max(500).default(""),
+  projectGrants: z.array(z.object({ projectId: z.string().uuid(), role: z.enum(PROJECT_ROLES) })).max(500).default([]),
 });
-export const teamUpdateSchema = teamCreateSchema.partial();
+export const teamUpdateSchema = teamCreateSchema.omit({ projectGrants: true }).partial();
 export const teamMemberSchema = z.object({ userId: z.string().uuid(), role: z.enum(["lead", "member"]).default("member") });
 
 export const projectAccessGrantSchema = z.object({
