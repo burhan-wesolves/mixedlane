@@ -46,6 +46,7 @@ export class ProjectsService {
     const project = await this.create(ctx.orgId, input);
     if (ctx.userId) await this.access.grantCreator(project.id, ctx.userId);
     if (ctx.agent) await this.access.grantAgentCreator(project.id, ctx.agent.id);
+    for (const person of ctx.delegators ?? []) if (person.userId) await this.access.grantCreator(project.id, person.userId);
     ctx.accessCache?.delete(project.id);
     this.events.emit("project", { orgId: ctx.orgId, projectId: project.id, action: "updated", actor: ctx.actor });
     return project;

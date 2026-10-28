@@ -67,7 +67,7 @@ export function ItemDetail({ projectKey, itemKey, variant, onOpenItem, onDeleted
     <div className={cn("w-full", isPage ? "px-6 py-6" : "px-6 py-5")}>
       <Header item={item} project={project} variant={variant} onOpenItem={onOpenItem} onDeleted={onDeleted} />
 
-      <Title key={item.id} value={item.title} onSave={(title) => save({ title })} large={isPage} readOnly={!canEdit} />
+      <Title key={`${item.id}:${canEdit}`} value={item.title} onSave={(title) => save({ title })} large={isPage} readOnly={!canEdit} />
 
       <div className={cn("mt-6 grid gap-8", isPage && "lg:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]")}>
         <div className="min-w-0 space-y-8">
@@ -247,6 +247,7 @@ function Header({
 function Title({ value, onSave, large, readOnly }: { value: string; onSave: (v: string) => void; large?: boolean; readOnly?: boolean }) {
   const [draft, setDraft] = useState(value);
   const commit = () => {
+    if (readOnly) return;
     const v = draft.trim();
     if (!v) setDraft(value);
     else if (v !== value) onSave(v);

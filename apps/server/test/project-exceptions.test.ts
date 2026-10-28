@@ -5,6 +5,39 @@ let ctx: TestApp;
 beforeAll(async () => { ctx = await bootApp(); });
 afterAll(async () => { await ctx.app.close(); });
 
+it("enforces an individual Viewer override for legacy members despite Editor defaults and team grants", async () => {
+  const { user: owner, org } = await signUp(ctx);
+  const o = owner.api(org);
+  const list = [];
+  for (const key of ["ONE", "TWO", "THREE"]) list.push((await o.post("/api/projects").send({ key, name: key, itemTypes: ["task"] }).expect(201)).body);
+  const member = await invite(ctx, owner, org, "legacy-override@tests.dev", "member");
+  const m = member.api(org);
+  expect((await m.get("/api/projects")).body).toHaveLength(3);
+  const selected = list[2];
+  const item = (await o.post("/api/items").send({ projectId: selected.id, type: "task", title: "Read only" })).body;
+  const team = (await o.post("/api/org/teams").send({ name: "Editors", projectGrants: [{ projectId: selected.id, role: "editor" }] })).body;
+  await o.post(`/api/org/teams/${team.id}/members`).send({ userId: member.id }).expect(204);
+  for (const hidden of list.slice(0, 2)) await o.patch(`/api/projects/${hidden.id}/revocations`).send({ userId: member.id, revoked: true }).expect(200);
+  const result = (await o.post(`/api/projects/${selected.id}/access`).send({ principalType: "user", principalId: member.id, role: "viewer" }).expect(200)).body;
+  expect(result.members.find((u: { userId: string }) => u.userId === member.id).role).toBe("viewer");
+  const visible = (await m.get("/api/projects").expect(200)).body;
+  expect(visible.map((p: { key: string }) => p.key)).toEqual(["THREE"]);
+  expect(visible[0].access.role).toBe("viewer");
+  await m.get(`/api/items/${item.id}`).expect(200);
+  await m.patch(`/api/items/${item.id}`).send({ title: "Forbidden" }).expect(403);
+  await m.patch(`/api/items/${item.id}/move`).send({ status: "done", sortOrder: 1 }).expect(403);
+  await m.post(`/api/items/${item.id}/comments`).send({ body: "Viewer finding" }).expect(201);
+  await m.patch(`/api/items/${item.id}`).send({ description: "Forbidden", dueDate: "2026-12-01" }).expect(403);
+  await m.delete(`/api/items/${item.id}`).expect(403);
+  await m.post("/api/items").send({ projectId: selected.id, type: "task", title: "Forbidden" }).expect(403);
+  await m.post("/api/items").send({ projectId: selected.id, parentId: item.id, type: "subtask", title: "Forbidden child" }).expect(403);
+  for (const hidden of list.slice(0, 2)) await m.get(`/api/projects/${hidden.id}`).expect(404);
+  // Removing the individual override restores otherwise valid team/default access.
+  const direct = result.grants.find((g: { principalId: string }) => g.principalId === member.id);
+  await o.delete(`/api/projects/${selected.id}/access/${direct.id}`).expect(200);
+  expect((await m.get(`/api/projects/${selected.id}`)).body.access.role).toBe("editor");
+});
+
 it("limits selected invitations, composes team grants, and preserves revocations across membership refreshes", async () => {
   const { user: owner, org } = await signUp(ctx);
   const o = owner.api(org);

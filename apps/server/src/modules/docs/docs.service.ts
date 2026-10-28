@@ -74,7 +74,9 @@ export class DocsService {
         out.set(s.id, { read: perms.includes("doc.read"), write: perms.includes("doc.write"), admin: perms.includes("doc.admin") });
       } else if (ctx.agent) {
         // Agents: org-wide spaces per the agent's docs setting; never admin.
-        out.set(s.id, { read: ctx.agent.docAccess !== "none", write: ctx.agent.docAccess === "write", admin: false });
+        const people = ctx.delegators ?? [];
+        const read = people.length > 0 && people.every((person) => person.orgRole !== "guest");
+        out.set(s.id, { read: read && ctx.agent.docAccess !== "none", write: read && ctx.agent.docAccess === "write", admin: false });
       } else if (elevated) out.set(s.id, { read: true, write: true, admin: true });
       else if (ctx.orgRole === "member") out.set(s.id, { read: true, write: true, admin: false });
       else out.set(s.id, NONE);

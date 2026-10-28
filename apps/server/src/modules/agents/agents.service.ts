@@ -20,6 +20,7 @@ import { EventBus } from "../../core/events";
 import { AppError, notFound } from "../../core/http";
 import { sha256 } from "../auth/crypto";
 import { defaultAgentSkill } from "./default-skill";
+import { AccessService } from "../access/access.service";
 
 type AgentRow = typeof agents.$inferSelect;
 type KeyRow = typeof apiKeys.$inferSelect;
@@ -55,6 +56,7 @@ export class AgentsService {
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly events: EventBus,
+    private readonly access: AccessService,
   ) {}
 
   async skill(ctx: RequestContext): Promise<AgentSkill> {
@@ -107,6 +109,12 @@ export class AgentsService {
   private async authorizedContext(row: AuthRow): Promise<RequestContext | null> {
     const now = new Date();
     if (row.key.revokedAt || (row.key.expiresAt && row.key.expiresAt <= now) || row.agent.disabledAt) return null;
+    if (!row.agent.createdBy || !row.key.userId || row.key.orgId !== row.agent.orgId) return null;
+    const contexts = await Promise.all([...new Set([row.agent.createdBy, row.key.userId])].map((id) => this.access.contextFor(row.agent.orgId, id)));
+    if (contexts.some((ctx) => !ctx)) return null;
+    const delegators = contexts as RequestContext[];
+    const canCreateProjects = row.agent.canCreateProjects && delegators.every((ctx) => ctx.orgPermissions.includes("project.create"));
+    const canReadOrgDocs = delegators.every((ctx) => ctx.orgRole !== "guest");
 
     // Record usage, at most once a minute per key.
     if (!row.key.lastUsedAt || now.getTime() - row.key.lastUsedAt.getTime() > TOUCH_EVERY_MS) {
@@ -121,17 +129,18 @@ export class AgentsService {
       // Agents hold no org-level permissions except, when allowed, creating projects;
       // everything else comes from project grants.
       orgRole: "guest",
-      orgPermissions: row.agent.canCreateProjects ? ["project.create"] : [],
+      orgPermissions: canCreateProjects ? ["project.create"] : [],
       userId: null,
+      delegators,
       agent: {
         id: row.agent.id,
         keyId: row.key.id,
         name: row.agent.name,
-        docAccess: row.agent.docAccess,
+        docAccess: canReadOrgDocs ? row.agent.docAccess : "none",
         itemScope: row.agent.itemScope,
         pageScope: row.agent.pageScope,
         planningMode: row.agent.planningMode,
-        canCreateProjects: row.agent.canCreateProjects,
+        canCreateProjects,
       },
       actor: { type: "agent", id: row.agent.id, name: row.agent.name },
     };
@@ -242,6 +251,7 @@ export class AgentsService {
    * stable across resets so MCP client configs keep working.
    */
   async createKey(ctx: RequestContext, agentId: string, input: z.output<typeof apiKeyCreateSchema>, reuseSecret?: string): Promise<CreatedApiKey> {
+    if (!ctx.userId || ctx.agent) throw new AppError(403, "A user account must issue agent credentials");
     await this.row(ctx, agentId);
     const reused = reuseSecret ? KEY_FORMAT.exec(reuseSecret) : null;
     const prefix = reused?.[1] ?? `ml_${randomBytes(6).toString("hex")}`;
@@ -251,6 +261,7 @@ export class AgentsService {
       .values({
         orgId: ctx.orgId,
         agentId,
+        userId: ctx.userId,
         name: input.name,
         prefix,
         keyHash: sha256(secret),
@@ -322,12 +333,7 @@ export class AgentsService {
 
   /** Key still valid? (used by the socket gateway's periodic recheck) */
   async keyActive(keyId: string): Promise<boolean> {
-    const [k] = await this.db
-      .select({ revokedAt: apiKeys.revokedAt, expiresAt: apiKeys.expiresAt, disabledAt: agents.disabledAt })
-      .from(apiKeys)
-      .innerJoin(agents, eq(agents.id, apiKeys.agentId))
-      .where(eq(apiKeys.id, keyId));
-    return !!k && !k.revokedAt && !k.disabledAt && (!k.expiresAt || k.expiresAt > new Date());
+    return !!(await this.contextForKey(keyId));
   }
 
   assertManageable(ctx: RequestContext) {

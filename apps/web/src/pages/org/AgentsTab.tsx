@@ -87,7 +87,7 @@ export function AgentsTab() {
           <h2 className="font-semibold">AI agents</h2>
           <p className="text-sm text-muted-foreground">
             Give Claude or any MCP-capable agent its own identity. It sees only the projects you grant, can do only what you toggle on, and everything it does is
-            attributed to it and shown to the team live.
+            attributed to it and shown to the team live. Its permissions are also capped by the current access of its creator and the account that issued its token; account downgrades and revocations apply to existing credentials.
           </p>
         </div>
         <Button onClick={() => setCreating(true)}>

@@ -84,7 +84,7 @@ The demo also has an AI agent, **Triage Bot**, with access to APP. Its API key i
   Invite by email or a shareable link. The invite can pre-assign teams, and accepting creates the account.
 - **Project access.**
   - Each project is either **Organization** (visible to members at a default role) or **Private**.
-  - You can grant roles (Admin, Editor, Commenter, Viewer) to people or whole teams. Someone gets the highest role that applies to them.
+  - You can grant roles (Admin, Editor, Commenter, Viewer) to people or whole teams. An individual role overrides inherited team/default roles; without one, the highest inherited role applies. Explicit revocations block access. Viewers can comment on findings but cannot edit tickets. Org owners and admins retain admin access.
   - The UI hides what you can't do, and the server enforces it on every endpoint.
   - Projects you can't see return 404, and every query is scoped to your organization.
 - **Uploads:**
@@ -227,7 +227,9 @@ curl -fsSL http://<host>/api/plugins/install.sh | sh -s -- claude-code        # 
 
 Skills: **mixedlane-planning** (plans/requirements → epic → milestone → story (acceptance criteria) → task), **mixedlane-work-tracking** (`start_work` → keys in branches/commits → `complete_work`), **mixedlane-docs**, **mixedlane-init** (writes `.mixedlane.json` so every tool uses the same project). Re-run the installer to update; `--uninstall` / `-Uninstall` removes it. Verified end to end: a plain “make a plan for X” prompt in Claude Code, Codex and opencode created the epic/stories/tasks in the linked project.
 
-**Per-agent settings** (agent page): **Can create projects** (on by default — the agent gets full access to projects it creates) and **When it plans work**: *Create items automatically* (default) or *Propose first* (`create_plan` returns a preview until the user confirms). Denied actions name the exact setting to change.
+**Per-agent settings** (agent page): **Can create projects** (on by default, subject to the delegating accounts' permissions) and **When it plans work**: *Create items automatically* (default) or *Propose first* (`create_plan` returns a preview until the user confirms). Denied actions name the exact setting to change.
+
+**Account permission ceiling.** Every API key and OAuth token is limited to the intersection of its agent's configured permissions, the agent creator's current access, and the issuing/approving account's current access. Project roles, explicit revocations, document access and project creation are checked on each request; existing tokens follow later account changes. Removing either account from the organization disables the credential, and deleting the agent creator disables all its credentials. Agents creating a project give the delegating accounts creator access to that project. Migration `0014_agent_delegators` binds older keys without an issuer to their known agent creator; credentials without a surviving creator remain unusable.
 
 **Planning tools:** `create_plan` (a whole tree in one call, validated against the project's hierarchy first, idempotent — re-running reuses existing items), `create_project`, `start_work`, `complete_work`; MCP prompts `plan` and `sync`.
 

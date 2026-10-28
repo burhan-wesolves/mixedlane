@@ -20,7 +20,7 @@ export const PROJECT_ROLE_HINTS: Record<ProjectRole, string> = {
   admin: "Everything, including settings and access",
   editor: "Create, edit, move and delete work",
   commenter: "View and comment",
-  viewer: "Read only",
+  viewer: "View tickets and comment on findings; cannot edit work",
 };
 
 export type OrgPermission =
@@ -52,8 +52,9 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRole, OrgPermission[]> = {
   guest: [],
 };
 
-const VIEWER: ProjectPermission[] = ["project.read", "doc.read"];
-const COMMENTER: ProjectPermission[] = [...VIEWER, "comment.create"];
+const VIEWER: ProjectPermission[] = ["project.read", "doc.read", "comment.create"];
+// Keep the existing Commenter role compatible with saved project grants.
+const COMMENTER: ProjectPermission[] = [...VIEWER];
 const EDITOR: ProjectPermission[] = [...COMMENTER, "item.create", "item.update", "item.move", "item.delete", "doc.write"];
 const ADMIN: ProjectPermission[] = [...EDITOR, "project.admin", "comment.moderate", "doc.admin"];
 

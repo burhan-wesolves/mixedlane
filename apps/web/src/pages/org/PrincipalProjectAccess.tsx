@@ -49,7 +49,7 @@ export function PrincipalProjectAccess({ principal, onClose }: { principal: Acce
   return <Dialog open onOpenChange={(open) => !open && onClose()}>
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
       <DialogHeader><DialogTitle>Project access for {principal.name}</DialogTitle>
-        <DialogDescription>{principal.type === "team" ? "Manage the project roles inherited by every member of this team." : "Manage individual grants and exceptions. Effective access also includes team grants and organization defaults; revocation overrides them."}</DialogDescription>
+        <DialogDescription>{principal.type === "team" ? "Manage the project roles inherited by every member of this team." : "An individual role overrides team and organization defaults. Remove it to inherit access again. Revocation blocks access regardless of these roles."}</DialogDescription>
       </DialogHeader>
       {principal.elevated && <p className="text-sm text-muted-foreground">Organization owners and admins always have admin access to every project.</p>}
       {access.isPending && <p role="status">Loading project access…</p>}
