@@ -58,6 +58,7 @@ export interface NotificationCreated {
 }
 
 export interface DomainEvents {
+  memberAccess: { orgId: string };
   agentAccess: { orgId: string };
   item: ItemChanged;
   comment: CommentChanged;

@@ -109,8 +109,8 @@ export async function signIn(ctx: TestApp, email: string, password = PASSWORD) {
 }
 
 /** Invites `email` into `org` with `role` (as `admin`), accepts it creating the account, returns the new user. */
-export async function invite(ctx: TestApp, admin: TestUser, org: string, email: string, role: string, teamIds: string[] = []) {
-  const res = await admin.api(org).post("/api/org/invites").send({ email, role, teamIds });
+export async function invite(ctx: TestApp, admin: TestUser, org: string, email: string, role: string, teamIds: string[] = [], projectIds?: string[]) {
+  const res = await admin.api(org).post("/api/org/invites").send({ email, role, teamIds, projectIds });
   if (res.status !== 201) throw new Error(`invite failed: ${res.status} ${JSON.stringify(res.body)}`);
   const token = new URL(res.body.url).pathname.split("/").pop()!;
   const agent = request.agent(ctx.app.getHttpServer());

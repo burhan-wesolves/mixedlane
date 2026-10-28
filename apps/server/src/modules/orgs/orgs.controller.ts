@@ -136,7 +136,7 @@ export class CurrentOrgController {
 
   /** Returns the invite link too, so admins can share it directly (no email setup needed). */
   @Post("invites")
-  invite(@Ctx() ctx: RequestContext, @ZBody(inviteCreateSchema) body: { email: string; role: Exclude<OrgRole, "owner">; teamIds: string[] }) {
+  invite(@Ctx() ctx: RequestContext, @ZBody(inviteCreateSchema) body: { email: string; role: Exclude<OrgRole, "owner">; teamIds: string[]; projectIds?: string[] }) {
     requireOrg(ctx, "org.invite");
     return this.orgs.invite(ctx, body);
   }

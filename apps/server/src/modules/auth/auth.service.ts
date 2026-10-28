@@ -278,7 +278,7 @@ export class AuthService {
       if (!user || user.email !== invite.email) {
         throw new AppError(403, `This invitation is for ${invite.email}. Sign in with that account to accept it.`);
       }
-      await this.db.transaction((tx) => this.orgs.consumeInvite(tx, invite.id, invite.orgId, user.id, invite.role, validTeams));
+      await this.db.transaction((tx) => this.orgs.consumeInvite(tx, invite.id, invite.orgId, user.id, invite.role, validTeams, invite.projectIds));
       return { orgs: await this.orgs.listForUser(user.id), session: null };
     }
 
@@ -289,7 +289,7 @@ export class AuthService {
     const session = await this.db.transaction(async (tx) => {
       // The invite link proves the email address.
       const [user] = await tx.insert(users).values({ email: invite.email, name: input.name!, passwordHash, emailVerifiedAt: new Date() }).returning();
-      await this.orgs.consumeInvite(tx, invite.id, invite.orgId, user.id, invite.role, validTeams);
+      await this.orgs.consumeInvite(tx, invite.id, invite.orgId, user.id, invite.role, validTeams, invite.projectIds);
       return this.issue(user, meta, undefined, tx);
     });
     await this.withOrgs(session);

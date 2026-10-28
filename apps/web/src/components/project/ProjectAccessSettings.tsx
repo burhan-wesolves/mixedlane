@@ -56,6 +56,7 @@ export function ProjectAccessSettings({ project }: { project: Project }) {
     onError,
   });
   const revoke = useMutation({ mutationFn: (id: string) => api.access.revoke(project.key, id), onSuccess: set, onError });
+  const exception = useMutation({ mutationFn: ({ userId, revoked }: { userId: string; revoked: boolean }) => api.access.setRevocation(project.key, userId, revoked), onSuccess: set, onError });
 
   const [adding, setAdding] = useState("");
   const [addRole, setAddRole] = useState<ProjectRole>("editor");
@@ -81,7 +82,7 @@ export function ProjectAccessSettings({ project }: { project: Project }) {
         <div className="grid gap-3 sm:grid-cols-2">
           {(
             [
-              { v: "org", icon: Globe2, title: "Organization", hint: "Every member can open it with the default role below. Guests still need an invite." },
+              { v: "org", icon: Globe2, title: "Organization", hint: "Unrestricted members get the default role. Restricted invitees and guests need grants. Explicit revocations take precedence." },
               { v: "private", icon: Lock, title: "Private", hint: "Only admins and the people or teams listed below." },
             ] as const
           ).map(({ v, icon: Icon, title, hint }) => (
@@ -110,6 +111,19 @@ export function ProjectAccessSettings({ project }: { project: Project }) {
             <span className="text-sm text-muted-foreground">access by default.</span>
           </div>
         )}
+      </section>
+      <section className="space-y-3 xl:col-span-2">
+        <h2 className="font-semibold">Effective access</h2>
+        <p className="text-sm text-muted-foreground">Revoke access to override individual and team grants. Restore removes the exception so valid grants apply again.</p>
+        <div className="divide-y rounded-xl border bg-card">
+          {data.members?.map((m) => <div key={m.userId} className="flex flex-wrap items-center gap-3 px-4 py-3">
+            <div className="min-w-0 flex-1"><p className="text-sm font-medium">{m.name} · {m.revoked ? "Revoked" : m.role ? PROJECT_ROLE_LABELS[m.role] : "No access"}</p>
+              <p className="text-xs text-muted-foreground">{m.sources.join(" · ") || "No grants"}</p></div>
+            {admin && !m.sources.includes("Organization admin") && <Button size="sm" variant="outline" disabled={exception.isPending} onClick={() => exception.mutate({ userId: m.userId, revoked: !m.revoked })}>
+              {m.revoked ? "Restore access" : "Revoke access"}<span className="sr-only"> for {m.name}</span>
+            </Button>}
+          </div>)}
+        </div>
       </section>
 
       <section className="space-y-3">

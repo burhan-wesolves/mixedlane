@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Search } from "lucide-react";
 import { TYPE_LABELS, defaultChildType, type WorkItemSummary } from "@mixedlane/shared";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,22 @@ import { useItemSheet } from "@/hooks/ui";
 import { cn } from "@/lib/utils";
 import { useProjectScope } from "@/lib/project";
 import type { ProjectOutletContext } from "./ProjectLayout";
+import { ProjectTickets } from "@/components/project/ProjectTickets";
 
 export function ListPage() {
+  const { project, tree } = useOutletContext<ProjectOutletContext>();
+  const [params, setParams] = useSearchParams();
+  const flat = params.get("view") === "all";
+  return <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex shrink-0 gap-2 px-6 pt-3" role="group" aria-label="List view">
+      <Button size="sm" variant={flat ? "secondary" : "ghost"} aria-pressed={flat} onClick={() => setParams({ view: "all" })}>All tickets</Button>
+      <Button size="sm" variant={!flat ? "secondary" : "ghost"} aria-pressed={!flat} onClick={() => setParams({})}>Hierarchy</Button>
+    </div>
+    {flat ? <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6"><ProjectTickets key={project.id} project={project} items={tree} /></div> : <HierarchyListPage />}
+  </div>;
+}
+
+function HierarchyListPage() {
   const { project, tree } = useOutletContext<ProjectOutletContext>();
   const { open } = useItemSheet();
   const update = useUpdateItem();

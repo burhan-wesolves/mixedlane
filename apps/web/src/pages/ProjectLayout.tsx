@@ -24,10 +24,11 @@ const tabs = [
 export function ProjectLayout() {
   const { projectKey = "" } = useParams();
   const { data: project, error } = useProject(projectKey);
-  const { data: tree } = useProjectTree(projectKey);
+  const { data: tree, error: treeError, refetch } = useProjectTree(projectKey);
   const openCreate = useCreateItemDialog();
 
   if (error) return <div className="p-10 text-sm text-muted-foreground">{error.message}</div>;
+  if (treeError) return <div role="alert" className="space-y-3 p-6 text-sm"><p>Could not load project tickets: {treeError.message}</p><Button variant="outline" onClick={() => void refetch()}>Retry</Button></div>;
   if (!project || !tree) {
     return (
       <div className="space-y-4 p-6">

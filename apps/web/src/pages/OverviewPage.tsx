@@ -8,6 +8,7 @@ import { DueDate, ItemCard, ItemRow, QuickAdd } from "@/components/item/ItemView
 import { useCreateItemDialog } from "@/components/create/CreateItemDialog";
 import { paths, useProjectScope } from "@/lib/project";
 import type { ProjectOutletContext } from "./ProjectLayout";
+import { ProjectTickets } from "@/components/project/ProjectTickets";
 
 export function OverviewPage() {
   const { project, tree } = useOutletContext<ProjectOutletContext>();
@@ -52,6 +53,8 @@ export function OverviewPage() {
             </div>
           ))}
         </div>
+
+        <ProjectTickets key={project.id} project={project} items={tree} preview />
 
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="min-w-0">

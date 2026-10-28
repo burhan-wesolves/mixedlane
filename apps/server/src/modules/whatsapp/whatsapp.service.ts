@@ -15,6 +15,7 @@ import { ItemsService } from "../work/items.service";
 import { decrypt, encrypt, randomSecret, verifySignature } from "../github/crypto";
 import { OpenWaClient } from "./client";
 import { triage, validateProposal, type ProviderConfig } from "./triage";
+import { TriageFailure } from "./ai-diagnostics";
 import { whatsappBootstrap } from "./bootstrap";
 
 type Draft = typeof drafts.$inferSelect;
@@ -304,10 +305,10 @@ export class WhatsappService {
       const { project } = await this.access.project(ctx, d.projectId, "item.create");
       const existing = await this.db.select({ id: workItems.id, key: workItems.key, title: workItems.title, type: workItems.type, parentId: workItems.parentId }).from(workItems).where(and(eq(workItems.orgId, orgId), eq(workItems.projectId, project.id))).orderBy(desc(workItems.updatedAt)).limit(200);
       const conn = await this.connection(orgId);
-      const { proposal, provider } = await triage({ report: d.report, project, items: existing }, JSON.parse(decrypt(conn.providersEnc)));
+      const { proposal, provider } = await triage({ report: d.report, project, items: existing }, JSON.parse(decrypt(conn.providersEnc)), { orgId, draftId: id });
       await this.db.update(drafts).set({ proposal, provider, status: "review", error: null }).where(and(scope(orgId, id), eq(drafts.status, "generating")));
-    } catch {
-      await this.db.update(drafts).set({ status: "failed", error: "Could not generate a valid draft. Check provider credentials, model names, and sender project access, then retry." }).where(and(scope(orgId, id), eq(drafts.status, "generating")));
+    } catch (error) {
+      await this.db.update(drafts).set({ status: "failed", error: error instanceof TriageFailure ? error.message : "Could not generate a valid draft. Check sender project access and integration configuration, then retry." }).where(and(scope(orgId, id), eq(drafts.status, "generating")));
     }
     await this.jobs.enqueue("whatsapp.notify", { orgId, id }, { uniqueKey: `wa-preview:${id}:${randomUUID()}` });
   }

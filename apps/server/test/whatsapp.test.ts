@@ -27,7 +27,7 @@ function mockRemote(providerMode: "valid" | "fallback" | "all-fail" = "valid") {
     if (String(url).endsWith("/sessions")) return Response.json([]);
     if (String(url).endsWith("/webhooks")) return Response.json({ id: randomUUID() });
     if (String(url).endsWith("/qr")) return Response.json({ qrCode: "data:image/png;base64,TEST", status: "qr_ready" });
-    return Response.json({ id: sessionId, name: "team-support", status: "qr_ready", engineLoaded: true, messageId: "outbound-1" });
+    return Response.json({ id: sessionId, name: "team-support", status: "qr_ready", engineLoaded: true, messageId: randomUUID() });
   }));
 }
 
@@ -253,7 +253,9 @@ describe("WhatsApp integration", () => {
   });
   it("refines an existing draft when the sender quotes its preview", async () => {
     const draft = await ingest(message({ body: "APP Reset fails on Android" })); await wa.generate(orgId, draft.id); await wa.notify(orgId, draft.id);
-    await ingest(message({ body: "Only happens on Android 16", quotedMessage: { id: "outbound-1" } }));
+    const previewId = (await wa.draft(orgId, draft.id)).previewMessageId;
+    expect(previewId).toBeTruthy();
+    await ingest(message({ body: "Only happens on Android 16", quotedMessage: { id: previewId } }));
     const edited = await wa.draft(orgId, draft.id);
     expect(edited.status).toBe("generating"); expect(edited.report).toContain("Android 16");
   });

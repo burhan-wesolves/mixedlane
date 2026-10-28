@@ -175,6 +175,12 @@ export function AppLayout() {
 
         <div className={cn("space-y-1 border-t border-sidebar-border p-3", collapsed && "px-2")}>
           {org && (
+            <NavLink aria-label="Settings" title={collapsed ? "Settings" : undefined} to={`/${org.slug}/settings`} onClick={() => setMobileOpen(false)} className={({ isActive }) => cn(navItem(isActive), "w-full")}>
+              <Settings className="size-4" />
+              {!collapsed && "Settings"}
+            </NavLink>
+          )}
+          {org && (
             <NavLink aria-label="AI agents" to={paths.orgSettings("agents")} className={({ isActive }) => cn(navItem(isActive), "w-full")}>
               <Bot className="size-4" />
               {!collapsed && "AI agents"}

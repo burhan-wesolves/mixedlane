@@ -119,6 +119,8 @@ export const inviteCreateSchema = z.object({
   email,
   role: z.enum(ORG_ROLES).exclude(["owner"]).default("member"),
   teamIds: z.array(z.string().uuid()).max(50).default([]),
+  // Omitted preserves legacy invitations; [] explicitly grants no projects by default.
+  projectIds: z.array(z.string().uuid()).max(500).optional(),
 });
 /** Accepting an invite either as the signed-in user, or by creating the account inline. */
 export const inviteAcceptSchema = z.object({ name: personName.optional(), password: password.optional() });
@@ -141,6 +143,7 @@ export const projectAccessSettingsSchema = z.object({
   visibility: z.enum(["org", "private"]).optional(),
   defaultRole: z.enum(PROJECT_ROLES).optional(),
 });
+export const projectRevocationSchema = z.object({ userId: z.string().uuid(), revoked: z.boolean() });
 
 export type RegisterInput = z.input<typeof registerSchema>;
 export type LoginInput = z.input<typeof loginSchema>;
@@ -197,6 +200,7 @@ export interface Invite {
   email: string;
   role: OrgRole;
   teamIds: string[];
+  projectIds: string[] | null;
   expiresAt: string;
   createdAt: string;
   invitedBy: string | null;
@@ -227,4 +231,5 @@ export interface ProjectAccessOverview {
   visibility: "org" | "private";
   defaultRole: ProjectRole;
   grants: ProjectAccessEntry[];
+  members: { userId: string; name: string; role: ProjectRole | null; revoked: boolean; sources: string[] }[];
 }
