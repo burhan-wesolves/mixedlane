@@ -7,6 +7,7 @@ import {
   type InvitePreview,
   type Member,
   type OrgRole,
+  type ProjectRole,
   type OrgSummary,
   type Team,
 } from "@mixedlane/shared";
@@ -207,15 +208,23 @@ export class OrgsService {
     return t;
   }
 
-  async createTeam(orgId: string, input: { name: string; description?: string }) {
+  async createTeam(orgId: string, input: { name: string; description?: string; projectGrants?: { projectId: string; role: ProjectRole }[] }) {
     let slug = slugify(input.name);
     for (let i = 2; ; i++) {
       const [taken] = await this.db.select({ id: teams.id }).from(teams).where(and(eq(teams.orgId, orgId), eq(teams.slug, slug)));
       if (!taken) break;
       slug = `${slugify(input.name)}-${i}`;
     }
-    const [t] = await this.db.insert(teams).values({ orgId, name: input.name, slug, description: input.description ?? "" }).returning();
-    return t;
+    return this.db.transaction(async (tx) => {
+      const grants = input.projectGrants ?? [];
+      const ids = [...new Set(grants.map((g) => g.projectId))];
+      if (ids.length !== grants.length) throw new AppError(400, "Choose each project only once");
+      const valid = ids.length ? await tx.select({ id: projects.id }).from(projects).where(and(eq(projects.orgId, orgId), inArray(projects.id, ids))) : [];
+      if (valid.length !== ids.length) throw new AppError(400, "Unknown project");
+      const [t] = await tx.insert(teams).values({ orgId, name: input.name, slug, description: input.description ?? "" }).returning();
+      if (grants.length) await tx.insert(projectAccess).values(grants.map((g) => ({ projectId: g.projectId, role: g.role, principalType: "team" as const, principalId: t.id })));
+      return t;
+    });
   }
 
   async updateTeam(orgId: string, teamId: string, patch: { name?: string; description?: string }) {
