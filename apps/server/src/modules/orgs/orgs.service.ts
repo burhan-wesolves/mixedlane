@@ -13,10 +13,11 @@ import {
 import { config } from "../../core/config";
 import type { RequestContext } from "../../core/context";
 import { DB, type Db, type Executor } from "../../core/database/database";
-import { invites, orgMembers, orgs, teamMembers, teams, users } from "../../core/database/schema";
+import { invites, orgMembers, orgs, projectAccess, projectRevocations, projects, teamMembers, teams, users } from "../../core/database/schema";
 import { AppError, notFound } from "../../core/http";
 import { MailService, actionEmail } from "../../core/mail";
 import { randomToken, sha256 } from "../auth/crypto";
+import { EventBus } from "../../core/events";
 
 /** Slugs that would collide with top-level app routes. */
 const RESERVED = new Set([
@@ -40,6 +41,7 @@ export class OrgsService {
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly mail: MailService,
+    private readonly events: EventBus,
   ) {}
 
   /* ---------- Orgs ---------- */
@@ -157,6 +159,7 @@ export class OrgsService {
       throw new AppError(409, "An organization needs at least one owner");
     }
     await this.db.update(orgMembers).set({ role }).where(and(eq(orgMembers.orgId, ctx.orgId), eq(orgMembers.userId, userId)));
+    this.events.emit("memberAccess", { orgId: ctx.orgId });
   }
 
   async removeMember(ctx: RequestContext, userId: string) {
@@ -168,8 +171,14 @@ export class OrgsService {
     await this.db.transaction(async (tx) => {
       const teamIds = (await tx.select({ id: teams.id }).from(teams).where(eq(teams.orgId, ctx.orgId))).map((t) => t.id);
       if (teamIds.length) await tx.delete(teamMembers).where(and(eq(teamMembers.userId, userId), inArray(teamMembers.teamId, teamIds)));
+      const projectIds = (await tx.select({ id: projects.id }).from(projects).where(eq(projects.orgId, ctx.orgId))).map((p) => p.id);
+      if (projectIds.length) {
+        await tx.delete(projectAccess).where(and(inArray(projectAccess.projectId, projectIds), eq(projectAccess.principalType, "user"), eq(projectAccess.principalId, userId)));
+        await tx.delete(projectRevocations).where(and(inArray(projectRevocations.projectId, projectIds), eq(projectRevocations.userId, userId)));
+      }
       await tx.delete(orgMembers).where(and(eq(orgMembers.orgId, ctx.orgId), eq(orgMembers.userId, userId)));
     });
+    this.events.emit("memberAccess", { orgId: ctx.orgId });
   }
 
   /* ---------- Teams ---------- */
@@ -217,7 +226,11 @@ export class OrgsService {
 
   async deleteTeam(orgId: string, teamId: string) {
     await this.team(orgId, teamId);
-    await this.db.delete(teams).where(eq(teams.id, teamId));
+    await this.db.transaction(async (tx) => {
+      await tx.delete(projectAccess).where(and(eq(projectAccess.principalType, "team"), eq(projectAccess.principalId, teamId)));
+      await tx.delete(teams).where(eq(teams.id, teamId));
+    });
+    this.events.emit("memberAccess", { orgId });
   }
 
   async addTeamMember(orgId: string, teamId: string, userId: string, role: "lead" | "member") {
@@ -227,11 +240,13 @@ export class OrgsService {
       .insert(teamMembers)
       .values({ teamId, userId, role })
       .onConflictDoUpdate({ target: [teamMembers.teamId, teamMembers.userId], set: { role } });
+    this.events.emit("memberAccess", { orgId });
   }
 
   async removeTeamMember(orgId: string, teamId: string, userId: string) {
     await this.team(orgId, teamId);
     await this.db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+    this.events.emit("memberAccess", { orgId });
   }
 
   /** Team ids of a user within an org (for project access resolution). */
@@ -252,6 +267,7 @@ export class OrgsService {
       email: i.email,
       role: i.role,
       teamIds: i.teamIds,
+      projectIds: i.projectIds,
       expiresAt: i.expiresAt.toISOString(),
       createdAt: i.createdAt.toISOString(),
       invitedBy: inviterName,
@@ -282,13 +298,19 @@ export class OrgsService {
       if (valid.length !== input.teamIds.length) throw new AppError(400, "Unknown team");
     }
 
+    if (input.projectIds?.length) {
+      const ids = [...new Set(input.projectIds)];
+      const valid = await this.db.select({ id: projects.id }).from(projects).where(and(eq(projects.orgId, ctx.orgId), inArray(projects.id, ids)));
+      if (valid.length !== ids.length) throw new AppError(400, "Unknown project");
+    }
+
     const token = randomToken();
     const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86400_000);
     // Re-inviting replaces any pending invite for the same email.
     await this.db.delete(invites).where(and(eq(invites.orgId, ctx.orgId), eq(invites.email, email), isNull(invites.acceptedAt)));
     const [row] = await this.db
       .insert(invites)
-      .values({ orgId: ctx.orgId, email, role: input.role, teamIds: input.teamIds, tokenHash: sha256(token), invitedBy: ctx.userId, expiresAt })
+      .values({ orgId: ctx.orgId, email, role: input.role, teamIds: input.teamIds, projectIds: input.projectIds ?? null, tokenHash: sha256(token), invitedBy: ctx.userId, expiresAt })
       .returning();
 
     const org = await this.get(ctx.orgId);
@@ -337,8 +359,13 @@ export class OrgsService {
   }
 
   /** Adds the user to the org (and invited teams) and marks the invite used. */
-  async consumeInvite(tx: Executor, inviteId: string, orgId: string, userId: string, role: OrgRole, teamIds: string[]) {
-    await tx.insert(orgMembers).values({ orgId, userId, role }).onConflictDoNothing();
+  async consumeInvite(tx: Executor, inviteId: string, orgId: string, userId: string, role: OrgRole, teamIds: string[], projectIds: string[] | null = null) {
+    const joined = await tx.insert(orgMembers).values({ orgId, userId, role, restrictedProjects: projectIds !== null }).onConflictDoNothing().returning();
+    if (!joined.length) throw new AppError(409, "Already a member of this organization");
+    if (projectIds?.length) {
+      const valid = await tx.select({ id: projects.id, defaultRole: projects.defaultRole }).from(projects).where(and(eq(projects.orgId, orgId), inArray(projects.id, projectIds)));
+      if (valid.length) await tx.insert(projectAccess).values(valid.map((p) => ({ projectId: p.id, principalType: "user" as const, principalId: userId, role: p.defaultRole }))).onConflictDoNothing();
+    }
     if (teamIds.length) {
       await tx.insert(teamMembers).values(teamIds.map((teamId) => ({ teamId, userId }))).onConflictDoNothing();
     }

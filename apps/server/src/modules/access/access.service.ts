@@ -13,7 +13,7 @@ import {
 } from "@mixedlane/shared";
 import type { RequestContext } from "../../core/context";
 import { DB, type Db } from "../../core/database/database";
-import { agents, orgMembers, orgs, projectAccess, projects, teamMembers, teams, users, workItems } from "../../core/database/schema";
+import { agents, orgMembers, orgs, projectAccess, projectRevocations, projects, teamMembers, teams, users, workItems } from "../../core/database/schema";
 import { AppError, notFound } from "../../core/http";
 import { EventBus } from "../../core/events";
 
@@ -97,6 +97,10 @@ export class AccessService {
 
     if (todo.length) {
       const elevated = ctx.orgRole === "owner" || ctx.orgRole === "admin";
+      const [membership] = ctx.userId && !elevated ? await this.db.select({ restricted: orgMembers.restrictedProjects }).from(orgMembers)
+        .where(and(eq(orgMembers.orgId, ctx.orgId), eq(orgMembers.userId, ctx.userId))) : [];
+      const revoked = ctx.userId && !elevated ? await this.db.select({ projectId: projectRevocations.projectId }).from(projectRevocations)
+        .where(and(eq(projectRevocations.userId, ctx.userId), inArray(projectRevocations.projectId, todo.map((p) => p.id)))) : [];
       const teamIds = elevated ? [] : await this.teamIds(ctx);
       const principals = [
         ...(ctx.agent ? [and(eq(projectAccess.principalType, "agent"), eq(projectAccess.principalId, ctx.agent.id))] : []),
@@ -119,12 +123,13 @@ export class AccessService {
           cache.set(p.id, g && allowed.includes("project.read") ? { role: g.role, permissions: allowed } : null);
           continue;
         }
+        if (revoked.some((r) => r.projectId === p.id)) { cache.set(p.id, null); continue; }
         let role: ProjectRole | null = elevated ? "admin" : null;
         const consider = (r: ProjectRole) => {
           if (!role || PROJECT_ROLE_RANK[r] > PROJECT_ROLE_RANK[role]) role = r;
         };
         if (!elevated) {
-          if (ctx.orgRole === "member" && p.visibility === "org") consider(p.defaultRole);
+          if (ctx.orgRole === "member" && !membership?.restricted && p.visibility === "org") consider(p.defaultRole);
           for (const g of grants) if (g.projectId === p.id) consider(g.role);
         }
         cache.set(p.id, role ? { role, permissions: PROJECT_ROLE_PERMISSIONS[role] } : null);
@@ -207,9 +212,36 @@ export class AccessService {
       teamIdList.length ? this.db.select({ id: teams.id, name: teams.name }).from(teams).where(inArray(teams.id, teamIdList)) : [],
       agentIds.length ? this.db.select({ id: agents.id, name: agents.name }).from(agents).where(inArray(agents.id, agentIds)) : [],
     ]);
+    const members = await this.db.select({ userId: users.id, name: users.name, orgRole: orgMembers.role, restricted: orgMembers.restrictedProjects })
+      .from(orgMembers).innerJoin(users, eq(users.id, orgMembers.userId)).where(eq(orgMembers.orgId, ctx.orgId)).orderBy(asc(users.name));
+    const memberships = await this.db.select({ userId: teamMembers.userId, teamId: teams.id, name: teams.name }).from(teamMembers)
+      .innerJoin(teams, eq(teams.id, teamMembers.teamId)).where(eq(teams.orgId, ctx.orgId));
+    const revocations = await this.db.select().from(projectRevocations).where(eq(projectRevocations.projectId, project.id));
     return {
       visibility: project.visibility,
       defaultRole: project.defaultRole,
+      members: members.map((m) => {
+        const elevated = m.orgRole === "owner" || m.orgRole === "admin";
+        const revoked = !elevated && revocations.some((r) => r.userId === m.userId);
+        const sources: string[] = [];
+        let role: ProjectRole | null = null;
+        const consider = (r: ProjectRole, source: string) => {
+          sources.push(source);
+          if (!role || PROJECT_ROLE_RANK[r] > PROJECT_ROLE_RANK[role]) role = r;
+        };
+        if (elevated) consider("admin", "Organization admin");
+        else {
+          if (m.orgRole === "member" && !m.restricted && project.visibility === "org") consider(project.defaultRole, "Organization default");
+          for (const g of grants) {
+            if (g.principalType === "user" && g.principalId === m.userId) consider(g.role, "Individual grant");
+            if (g.principalType === "team") {
+              const team = memberships.find((t) => t.userId === m.userId && t.teamId === g.principalId);
+              if (team) consider(g.role, `Team: ${team.name}`);
+            }
+          }
+        }
+        return { userId: m.userId, name: m.name, role: revoked ? null : role, revoked, sources: revoked ? ["Explicit revocation", ...sources] : sources };
+      }),
       grants: grants.map((g) => {
         const u = userRows.find((x) => x.id === g.principalId);
         const t = teamRows.find((x) => x.id === g.principalId);
@@ -260,6 +292,18 @@ export class AccessService {
     const { project } = await this.project(ctx, projectId, "project.admin");
     if (!UUID.test(grantId)) throw notFound("Grant");
     await this.db.delete(projectAccess).where(and(eq(projectAccess.projectId, project.id), eq(projectAccess.id, grantId)));
+    this.events.emit("project", { orgId: ctx.orgId, projectId: project.id, action: "access", actor: ctx.actor });
+    return this.overview(ctx, project.id);
+  }
+
+  async setRevocation(ctx: RequestContext, projectId: string, userId: string, revoked: boolean) {
+    const { project } = await this.project(ctx, projectId, "project.admin");
+    const [member] = await this.db.select().from(orgMembers).where(and(eq(orgMembers.orgId, ctx.orgId), eq(orgMembers.userId, userId)));
+    if (!member) throw notFound("Member");
+    if (member.role === "owner" || member.role === "admin") throw new AppError(400, "Organization owners and admins always retain project access");
+    if (revoked) await this.db.insert(projectRevocations).values({ projectId: project.id, userId }).onConflictDoNothing();
+    else await this.db.delete(projectRevocations).where(and(eq(projectRevocations.projectId, project.id), eq(projectRevocations.userId, userId)));
+    ctx.accessCache?.delete(project.id);
     this.events.emit("project", { orgId: ctx.orgId, projectId: project.id, action: "access", actor: ctx.actor });
     return this.overview(ctx, project.id);
   }

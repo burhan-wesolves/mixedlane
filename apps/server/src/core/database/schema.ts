@@ -83,6 +83,7 @@ export const orgMembers = pgTable(
     orgId: uuid("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     role: text("role").$type<OrgRole>().notNull(),
+    restrictedProjects: boolean("restricted_projects").notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.userId] }), index("org_members_user_idx").on(t.userId)],
@@ -118,6 +119,7 @@ export const invites = pgTable("invites", {
   email: text("email").notNull(),
   role: text("role").$type<OrgRole>().notNull(),
   teamIds: jsonb("team_ids").$type<string[]>().notNull().default([]),
+  projectIds: jsonb("project_ids").$type<string[] | null>(),
   tokenHash: text("token_hash").notNull().unique(),
   invitedBy: uuid("invited_by").references(() => users.id, { onDelete: "set null" }),
   expiresAt: ts("expires_at").notNull(),
@@ -200,6 +202,13 @@ export const projectAccess = pgTable(
   },
   (t) => [uniqueIndex("project_access_principal_idx").on(t.projectId, t.principalType, t.principalId)],
 );
+
+/** Explicit user exceptions override all project grants, including organization defaults. */
+export const projectRevocations = pgTable("project_revocations", {
+  projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: createdAt(),
+}, (t) => [primaryKey({ columns: [t.projectId, t.userId] })]);
 
 export const workItems = pgTable(
   "work_items",

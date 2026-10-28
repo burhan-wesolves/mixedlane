@@ -140,11 +140,12 @@ export const api = {
       request<void>(`/org/teams/${teamId}/members`, json("POST", { userId, role })),
     removeTeamMember: (teamId: string, userId: string) => request<void>(`/org/teams/${teamId}/members/${userId}`, { method: "DELETE" }),
     invites: () => request<Invite[]>("/org/invites"),
-    invite: (email: string, role: OrgRole, teamIds: string[]) =>
-      request<{ invite: Invite; url: string }>("/org/invites", json("POST", { email, role, teamIds })),
+    invite: (email: string, role: OrgRole, teamIds: string[], projectIds: string[] = []) =>
+      request<{ invite: Invite; url: string }>("/org/invites", json("POST", { email, role, teamIds, projectIds })),
     revokeInvite: (id: string) => request<void>(`/org/invites/${id}`, { method: "DELETE" }),
   },
   access: {
+    setRevocation: (projectKey: string, userId: string, revoked: boolean) => request<ProjectAccessOverview>(`/projects/${projectKey}/revocations`, json("PATCH", { userId, revoked })),
     get: (projectKey: string) => request<ProjectAccessOverview>(`/projects/${projectKey}/access`),
     settings: (projectKey: string, patch: { visibility?: "org" | "private"; defaultRole?: ProjectRole }) =>
       request<ProjectAccessOverview>(`/projects/${projectKey}/access`, json("PATCH", patch)),

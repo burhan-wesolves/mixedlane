@@ -8,6 +8,7 @@ import {
   itemUpdateSchema,
   projectAccessGrantSchema,
   projectAccessSettingsSchema,
+  projectRevocationSchema,
   projectCreateSchema,
   projectUpdateSchema,
   type ItemCreate,
@@ -126,6 +127,11 @@ export class ProjectsController {
   @Delete(":id/access/:grantId")
   revokeGrant(@Ctx() ctx: RequestContext, @Param("id") id: string, @Param("grantId") grantId: string) {
     return this.access.revoke(ctx, id, grantId);
+  }
+
+  @Patch(":id/revocations")
+  setRevocation(@Ctx() ctx: RequestContext, @Param("id") id: string, @ZBody(projectRevocationSchema) body: { userId: string; revoked: boolean }) {
+    return this.access.setRevocation(ctx, id, body.userId, body.revoked);
   }
 }
 

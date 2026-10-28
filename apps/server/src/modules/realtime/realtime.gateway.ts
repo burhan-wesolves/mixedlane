@@ -244,6 +244,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayDisconnect, OnMo
 
   onModuleInit() {
     this.events.on("agentAccess", ({ orgId }) => this.syncOrg(orgId));
+    this.events.on("memberAccess", ({ orgId }) => this.syncOrg(orgId));
     this.events.on("item", ({ item, action, actor }) =>
       this.send(rooms.project(item.projectId), {
         type: "item",

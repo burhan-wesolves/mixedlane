@@ -311,10 +311,12 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgRole>("member");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [projectIds, setProjectIds] = useState<string[]>([]);
+  const { data: projects = [], isLoading: projectsLoading, isError: projectsError } = useQuery({ queryKey: ["projects"], queryFn: api.projects.list });
   const [link, setLink] = useState<string | null>(null);
   const { data: teams = [] } = useQuery({ queryKey: ["org", "teams"], queryFn: api.orgs.teams });
   const send = useMutation({
-    mutationFn: () => api.orgs.invite(email.trim(), role, teamIds),
+    mutationFn: () => api.orgs.invite(email.trim(), role, teamIds, projectIds),
     onSuccess: (res) => {
       setLink(res.url);
       qc.invalidateQueries({ queryKey: ["org", "invites"] });
@@ -371,6 +373,19 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
               <Label>Role</Label>
               <RoleSelect value={role} onChange={setRole} />
             </div>
+            <fieldset className="grid gap-2">
+              <legend className="text-sm font-medium">Project access</legend>
+              <p className="text-xs text-muted-foreground">Only selected projects and team grants apply. Organization admins retain access to all projects.</p>
+              {projectsLoading && <p className="text-sm">Loading projects…</p>}
+              {projectsError && <p role="alert" className="text-sm text-destructive">Could not load projects. Reopen the invitation to retry.</p>}
+              <div className="max-h-40 space-y-2 overflow-y-auto">
+                {projects.map((p) => <label key={p.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={projectIds.includes(p.id)} onChange={(e) => setProjectIds((ids) => e.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id))} />
+                  {p.key} · {p.name}
+                </label>)}
+              </div>
+              {!projectsLoading && !projectsError && !projects.length && <p className="text-xs text-muted-foreground">No projects yet.</p>}
+            </fieldset>
             {teams.length > 0 && (
               <div className="grid gap-1.5">
                 <Label>Teams (optional)</Label>
@@ -395,7 +410,7 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
               <Button type="button" variant="ghost" onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={send.isPending || !email.trim()}>
+              <Button type="submit" disabled={send.isPending || !email.trim() || projectsLoading || projectsError}>
                 <Link2 className="size-4" /> Create invitation
               </Button>
             </DialogFooter>
