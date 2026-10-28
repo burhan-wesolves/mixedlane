@@ -28,6 +28,8 @@ export interface RequestContext {
   /** Set when an AI agent calls with an API key (userId is then null). */
   agent?: { id: string; keyId: string; name: string; docAccess: "none" | "read" | "write"; itemScope?: "own" | "all"; pageScope?: "own" | "all"; planningMode: "auto" | "propose"; canCreateProjects: boolean };
   actor: Actor;
+  /** Current human delegators for an agent credential. Each limits its permissions. */
+  delegators?: RequestContext[];
   /** Per-request cache of resolved project access (see AccessService). */
   accessCache?: Map<string, ProjectAccessInfo | null>;
 }

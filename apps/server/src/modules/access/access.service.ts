@@ -114,13 +114,16 @@ export class AccessService {
               .select({ projectId: projectAccess.projectId, principalType: projectAccess.principalType, principalId: projectAccess.principalId, role: projectAccess.role, permissions: projectAccess.permissions })
               .from(projectAccess)
               .where(and(inArray(projectAccess.projectId, todo.map((p) => p.id)), or(...principals)));
+      const ceilings = ctx.agent ? await Promise.all((ctx.delegators ?? []).map((person) => this.resolveMany(person, todo))) : [];
 
       for (const p of todo) {
         // Agents: only explicit grants, narrowed to the permissions toggled on for them.
         if (ctx.agent) {
           const g = grants.find((x) => x.projectId === p.id);
-          const allowed = g ? PROJECT_ROLE_PERMISSIONS[g.role].filter((perm) => !g.permissions || g.permissions.includes(perm)) : [];
-          cache.set(p.id, g && allowed.includes("project.read") ? { role: g.role, permissions: allowed } : null);
+          const allowed = g && ceilings.length ? PROJECT_ROLE_PERMISSIONS[g.role].filter((perm) => (!g.permissions || g.permissions.includes(perm)) && ceilings.every((ceiling) => ceiling.get(p.id)?.permissions.includes(perm))) : [];
+          const roles = g ? [g.role, ...ceilings.map((ceiling) => ceiling.get(p.id)?.role ?? "viewer")] : [];
+          const role = roles.sort((a, b) => PROJECT_ROLE_RANK[a] - PROJECT_ROLE_RANK[b])[0];
+          cache.set(p.id, role && allowed.includes("project.read") ? { role, permissions: allowed } : null);
           continue;
         }
         if (revoked.some((r) => r.projectId === p.id)) { cache.set(p.id, null); continue; }
